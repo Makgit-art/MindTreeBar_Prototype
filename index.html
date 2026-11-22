@@ -3,16 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebAR Image Tracking</title>
+    <title>WebAR Generated Tree</title>
     
     <!-- 1. Load A-Frame -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     
-    <!-- 2. Load MindAR for Image Tracking in A-Frame -->
+    <!-- 2. Load MindAR for Image Tracking -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
-    
-    <!-- 3. Load A-Frame Extras (Required to load .fbx files) -->
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
     
     <style>
       body {
@@ -23,7 +20,7 @@
   </head>
   <body>
     <!-- The AR Scene: Automatically asks for camera permissions -->
-    <!-- Note: Replace 'targets.mind' with your compiled image target file from the MindAR compiler -->
+    <!-- Replace 'targets.mind' with your compiled image target file -->
     <a-scene 
       mindar-image="imageTargetSrc: ./targets.mind; autoStart: true;" 
       color-space="sRGB" 
@@ -31,24 +28,41 @@
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
       
-      <!-- Pre-load your assets here -->
-      <a-assets>
-        <!-- Replace 'model.fbx' with the actual path to your FBX file -->
-        <a-asset-item id="myFbxModel" src="model.fbx"></a-asset-item>
-      </a-assets>
-
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- The AR Anchor: targetIndex 0 is the first image ("Reticle for Mind TreeV3.png") -->
+      <!-- The AR Anchor: targetIndex 0 corresponds to your uploaded Reticle image -->
       <a-entity mindar-image-target="targetIndex: 0">
         
-        <!-- The Model: Spawns and tracks to the image -->
-        <!-- Adjust scale="0.1 0.1 0.1" and position as needed for your specific model size -->
-        <a-entity 
-          fbx-model="src: #myFbxModel" 
-          position="0 0 0" 
-          scale="0.1 0.1 0.1" 
-          rotation="0 0 0">
+        <!-- GENERATED TREE -->
+        <!-- Rotated 90 degrees on the X-axis so it stands vertically when the printed image is flat on a table -->
+        <a-entity rotation="90 0 0" position="0 0 0" scale="0.3 0.3 0.3">
+          
+          <!-- Tree Trunk -->
+          <a-cylinder 
+            color="#5C4033" 
+            radius="0.1" 
+            height="0.6" 
+            position="0 0.3 0">
+          </a-cylinder>
+          
+          <!-- Bottom Foliage Layer -->
+          <a-cone 
+            color="#228B22" 
+            radius-bottom="0.5" 
+            radius-top="0" 
+            height="0.8" 
+            position="0 0.9 0">
+          </a-cone>
+          
+          <!-- Top Foliage Layer -->
+          <a-cone 
+            color="#32CD32" 
+            radius-bottom="0.35" 
+            radius-top="0" 
+            height="0.6" 
+            position="0 1.4 0">
+          </a-cone>
+
         </a-entity>
         
       </a-entity>
