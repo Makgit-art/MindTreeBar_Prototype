@@ -1,124 +1,57 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Mind Tree AR Experience</title>
-  
-  <!-- A-Frame VR/AR Framework -->
-  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <!-- AR.js for Image Tracking (Natural Feature Tracking) -->
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
-  <!-- Three.js FBX Loader and its dependency (fflate) -->
-  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/FBXLoader.js"></script>
-
-  <script>
-    // 1. Custom A-Frame Component to load FBX files
-    AFRAME.registerComponent('fbx-model', {
-      schema: { src: { type: 'string' } },
-      init: function () {
-        const loader = new THREE.FBXLoader();
-        loader.load(this.data.src, (object) => {
-          this.el.setObject3D('mesh', object);
-        }, undefined, (error) => {
-          console.error("Error loading FBX:", error);
-        });
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebAR Image Tracking</title>
+    
+    <!-- 1. Load A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    
+    <!-- 2. Load MindAR for Image Tracking in A-Frame -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.2/dist/mindar-image-aframe.prod.js"></script>
+    
+    <!-- 3. Load A-Frame Extras (Required to load .fbx files) -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+    
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
       }
-    });
-
-    // 2. Microphone & Speech Recognition Setup
-    window.addEventListener('load', () => {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = function(event) {
-          const lastResult = event.results[event.results.length - 1];
-          const transcript = lastResult[0].transcript.trim().toLowerCase();
-          
-          if (transcript.includes('be happy')) {
-            spawnFlowerOnSpheres();
-          }
-        };
-
-        // Start listening (Requires user to grant mic permissions on HTTPS)
-        recognition.start();
-      } else {
-        console.warn("Speech Recognition API is not supported in this browser.");
-      }
-    });
-
-    // 3. Logic to spawn flowers on the tree's spheres
-    function spawnFlowerOnSpheres() {
-      const treeEntity = document.querySelector('#mindTree');
-      if (!treeEntity) return;
-
-      // Note: In a production build, you would traverse the Three.js mesh to find specific 'sphere' nodes.
-      // Here, we spawn a floral entity relative to the parent MindTreebar2 coordinates.
-      const flower = document.createElement('a-entity');
+    </style>
+  </head>
+  <body>
+    <!-- The AR Scene: Automatically asks for camera permissions -->
+    <!-- Note: Replace 'targets.mind' with your compiled image target file from the MindAR compiler -->
+    <a-scene 
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: true;" 
+      color-space="sRGB" 
+      renderer="colorManagement: true, physicallyCorrectLights" 
+      vr-mode-ui="enabled: false" 
+      device-orientation-permission-ui="enabled: false">
       
-      // Example coordinates relative to the FBX model's center
-      const offsetX = (Math.random() - 0.5) * 2;
-      const offsetY = Math.random() * 3 + 1; // Spawning slightly higher up
-      const offsetZ = (Math.random() - 0.5) * 2;
+      <!-- Pre-load your assets here -->
+      <a-assets>
+        <!-- Replace 'model.fbx' with the actual path to your FBX file -->
+        <a-asset-item id="myFbxModel" src="model.fbx"></a-asset-item>
+      </a-assets>
 
-      // Using a simple 3D geometric representation of a flower
-      // To use a custom 3D flower model, use: flower.setAttribute('gltf-model', 'url(flower.gltf)');
-      flower.setAttribute('geometry', 'primitive: dodecahedron; radius: 0.2');
-      flower.setAttribute('material', 'color: #ff69b4; roughness: 0.2');
-      flower.setAttribute('position', `${offsetX} ${offsetY} ${offsetZ}`);
-      
-      // Add animation to make it pop into existence
-      flower.setAttribute('animation', 'property: scale; from: 0 0 0; to: 1 1 1; dur: 500; easing: easeOutElastic');
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      treeEntity.appendChild(flower);
-    }
-  </script>
-</head>
-
-<!-- Body styling prevents scrolling while the AR camera is active -->
-<body style="margin: 0; overflow: hidden;">
-
-  <!-- 
-    The AR Scene.
-    'embedded' strips styling to fill the window.
-    AR.js replaces the HTML background (null) with the live webcam feed.
-  -->
-  <a-scene
-    vr-mode-ui="enabled: false;"
-    renderer="logarithmicDepthBuffer: true; alpha: true;"
-    embedded
-    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
-
-    <!-- 
-      Image Tracker (Natural Feature Tracking)
-      url points to the compiled Image Descriptors for "reticle for Mind TreeV3"
-    -->
-    <a-nft
-      type="nft"
-      url="./assets/reticle-mind-tree/reticle"
-      smooth="true"
-      smoothCount="10"
-      smoothTolerance=".01"
-      smoothThreshold="5">
-
-      <!-- The 3D Object spawned when the image is tracked -->
-      <a-entity
-        id="mindTree"
-        fbx-model="src: ./assets/MindTreebar2.fbx;"
-        scale="1 1 1"
-        position="0 0 0"
-        rotation="0 0 0">
+      <!-- The AR Anchor: targetIndex 0 is the first image ("Reticle for Mind TreeV3.png") -->
+      <a-entity mindar-image-target="targetIndex: 0">
+        
+        <!-- The Model: Spawns and tracks to the image -->
+        <!-- Adjust scale="0.1 0.1 0.1" and position as needed for your specific model size -->
+        <a-entity 
+          fbx-model="src: #myFbxModel" 
+          position="0 0 0" 
+          scale="0.1 0.1 0.1" 
+          rotation="0 0 0">
+        </a-entity>
+        
       </a-entity>
-
-    </a-nft>
-
-    <!-- AR Camera (handles proximity and side-to-side 6DoF movement) -->
-    <a-entity camera></a-entity>
-
-  </a-scene>
-</body>
+    </a-scene>
+  </body>
 </html>
