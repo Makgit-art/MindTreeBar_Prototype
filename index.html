@@ -751,6 +751,8 @@
 
       // Voice-to-Flower state
       isListeningSpeech: false,
+      isStartingSpeech: false,
+      activeStopSpeechFn: null,
       flowerCount: 0,
       hasShownBet36Ad: false,
       recordedAudioUrl: null,
@@ -758,7 +760,7 @@
       waveformPeaks: [],
       selectedFlower: null,
 
-      // Touch / Pointer interaction for rotating & scaling
+      // Touch / Pointer interaction
       isDragging: false,
       pointerDownX: 0,
       pointerDownY: 0,
@@ -769,7 +771,7 @@
 
     /**
      * ============================================================================
-     * 4. THREE.JS PBR SCENE, RETICLE LOCK TRACKER & VERTICAL MIND TREE
+     * 4. THREE.JS PBR SCENE, VERTICAL MIND TREE & CANOPY FLOWER SYSTEM
      * ============================================================================
      */
     const arCanvas = document.getElementById('ar-canvas');
@@ -788,16 +790,9 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 50);
+    camera.position.set(0, 0.14, 0.35);
 
-    const camera = new THREE.PerspectiveCamera(
-      55,
-      window.innerWidth / window.innerHeight,
-      0.05,
-      50
-    );
-    camera.position.set(0, 0, 0);
-
-    // Warm Natural Sunlight + Botanical Hemisphere Rig
     const hemiLight = new THREE.HemisphereLight(0xf5f3ee, 0x3b5243, 1.15);
     hemiLight.position.set(0, 4, 0);
     scene.add(hemiLight);
@@ -821,18 +816,11 @@
     rimLight.position.set(-2.5, 2.0, -2.2);
     scene.add(rimLight);
 
-    // Root World Anchor Group
     const worldAnchorGroup = new THREE.Group();
     worldAnchorGroup.visible = false;
     scene.add(worldAnchorGroup);
 
-    // Virtual Vertical Reticle Card for Preview Mode
-    const demoReticleCardGroup = new THREE.Group();
-    demoReticleCardGroup.visible = false;
-    worldAnchorGroup.add(demoReticleCardGroup);
-
-    // Soft Botanical Ground Ripple Rings
-    const groundRingGeo = new THREE.RingGeometry(0.18, 0.21, 64);
+    const groundRingGeo = new THREE.RingGeometry(0.22, 0.25, 64);
     groundRingGeo.rotateX(-Math.PI / 2);
     const groundRingMat = new THREE.MeshBasicMaterial({
       color: 0xa8c0ae,
@@ -841,10 +829,10 @@
       side: THREE.DoubleSide
     });
     const groundRingMesh = new THREE.Mesh(groundRingGeo, groundRingMat);
-    groundRingMesh.position.y = 0.002;
+    groundRingMesh.position.y = 0.003;
     worldAnchorGroup.add(groundRingMesh);
 
-    const outerRippleGeo = new THREE.RingGeometry(0.24, 0.255, 64);
+    const outerRippleGeo = new THREE.RingGeometry(0.28, 0.295, 64);
     outerRippleGeo.rotateX(-Math.PI / 2);
     const outerRippleMat = new THREE.MeshBasicMaterial({
       color: 0xf5f3ee,
@@ -853,545 +841,17 @@
       side: THREE.DoubleSide
     });
     const outerRippleMesh = new THREE.Mesh(outerRippleGeo, outerRippleMat);
-    outerRippleMesh.position.y = 0.001;
+    outerRippleMesh.position.y = 0.002;
     worldAnchorGroup.add(outerRippleMesh);
 
-    // Container for the 3D Mind Tree & Spoken Flowers
     const modelPivot = new THREE.Group();
     worldAnchorGroup.add(modelPivot);
 
     const flowersGroup = new THREE.Group();
-    flowersGroup.name = 'SpokenFlowersGroup';
+    modelPivot.add(flowersGroup);
 
-    let animatedParts = {
-      canopy: null
-    };
+    let animatedParts = { canopy: null };
 
-    /**
-     * Keeps the 3D tree stationary in world coordinates once spawned while
-     * updating the 3D camera from IMU + optical flow motion.
-     */
-    class ReticleLockTracker {
-      constructor(threeCamera) {
-        this.camera = threeCamera;
-        this.raycaster = new THREE.Raycaster();
-        this.lockedWorldPos = new THREE.Vector3(0, 0, -0.85);
-        this.targetCamQuat = new THREE.Quaternion();
-        this.combinedCamPos = new THREE.Vector3();
-        this.tempDir = new THREE.Vector3();
-        this.tempTarget = new THREE.Vector3();
-      }
-
-      update(reticleNDC, apparentScale, isReticleVisible, isDemoMode, isTargetLocked, hasFixedWorldAnchor, sensorOffset, opticalOffset, deviceEuler, hasGyro) {
-        if (isDemoMode) {
-          this.camera.position.set(0, 0.48, 0.68);
-          this.camera.lookAt(0, 0.04, -0.55);
-          this.lockedWorldPos.lerp(new THREE.Vector3(0, 0, -0.55), 0.15);
-          return this.lockedWorldPos;
-        }
-
-        if (hasGyro) {
-          this.targetCamQuat.setFromEuler(deviceEuler);
-          this.camera.quaternion.slerp(this.targetCamQuat, 0.28);
-        } else {
-          this.camera.quaternion.identity();
-        }
-
-        if (isTargetLocked) {
-          this.combinedCamPos.copy(sensorOffset).add(opticalOffset);
-          this.camera.position.lerp(this.combinedCamPos, 0.25);
-        } else {
-          this.camera.position.set(0, 0, 0);
-        }
-        this.camera.updateMatrixWorld();
-
-        if (isTargetLocked && hasFixedWorldAnchor) {
-          return this.lockedWorldPos;
-        }
-
-        const depth = THREE.MathUtils.clamp(0.85 / Math.max(0.35, apparentScale), 0.40, 1.85);
-        const ndc = isReticleVisible ? reticleNDC : new THREE.Vector2(0, 0);
-
-        this.raycaster.setFromCamera(ndc, this.camera);
-        this.tempDir.copy(this.raycaster.ray.direction).normalize();
-        this.tempTarget.copy(this.camera.position).addScaledVector(this.tempDir, depth);
-
-        this.lockedWorldPos.copy(this.tempTarget);
-        return this.lockedWorldPos;
-      }
-
-      reset() {
-        this.lockedWorldPos.set(0, 0, -0.85);
-        this.camera.position.set(0, 0, 0);
-        this.camera.quaternion.identity();
-      }
-    }
-
-    const reticleLockTracker = new ReticleLockTracker(camera);
-
-    /**
-     * Creates and blooms a 3D flower directly touching the outer surface of the
-     * Mind Tree's canopy mesh using an inward surface raycast.
-     */
-    const canopySurfaceRaycaster = new THREE.Raycaster();
-
-    function spawnFlowerOnTree(spokenWords = '') {
-      if (!state.isTargetLocked) {
-        autoSpawnMindTree('Mind Tree rooted on reticle');
-      }
-
-      const flowerGroup = new THREE.Group();
-      const palette = [0xf7a8b8, 0xffd1dc, 0xfff0f5, 0xfad2e1, 0xffb5a7, 0xffe5ec];
-      const petalColor = palette[state.flowerCount % palette.length];
-
-      const petalMat = new THREE.MeshStandardMaterial({
-        color: petalColor,
-        roughness: 0.4,
-        metalness: 0.05,
-        side: THREE.DoubleSide
-      });
-      const centerMat = new THREE.MeshStandardMaterial({
-        color: 0xf4c430,
-        roughness: 0.35,
-        emissive: 0x3a2a00,
-        emissiveIntensity: 0.25
-      });
-
-      // 6 sculpted petals arranged around a golden stamen center (resting at local y = 0)
-      const petalCount = 6;
-      for (let i = 0; i < petalCount; i++) {
-        const angle = (i / petalCount) * Math.PI * 2;
-        const petalGeo = new THREE.SphereGeometry(0.022, 10, 8);
-        petalGeo.scale(1.35, 0.35, 0.75);
-        const petal = new THREE.Mesh(petalGeo, petalMat);
-        petal.position.set(Math.cos(angle) * 0.020, 0.002, Math.sin(angle) * 0.020);
-        petal.rotation.y = -angle;
-        petal.rotation.z = 0.24;
-        petal.castShadow = true;
-        flowerGroup.add(petal);
-      }
-
-      const stamen = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 10), centerMat);
-      stamen.position.y = 0.005;
-      flowerGroup.add(stamen);
-
-      // Compute exact canopy mesh surface contact point via inward raycasting
-      modelPivot.updateMatrixWorld(true);
-      const canopyTarget = animatedParts.canopy || modelPivot;
-      const canopyBox = new THREE.Box3().setFromObject(canopyTarget);
-      const worldCenter = canopyBox.getCenter(new THREE.Vector3());
-      const worldSize = canopyBox.getSize(new THREE.Vector3());
-      const outerRadius = Math.max(worldSize.x, worldSize.y, worldSize.z) * 0.85 + 0.25;
-
-      // Distribute flowers across the visible upper-to-mid canopy hemisphere
-      const idx = state.flowerCount;
-      const goldenAngle = idx * 2.39996;
-      const vFrac = (idx * 0.6180339) % 1;
-      const cosPhi = 0.85 - vFrac * 0.68;
-      const sinPhi = Math.sqrt(Math.max(0.08, 1 - cosPhi * cosPhi));
-
-      const radialDir = new THREE.Vector3(
-        Math.cos(goldenAngle) * sinPhi,
-        cosPhi,
-        Math.sin(goldenAngle) * sinPhi
-      ).normalize();
-
-      // Cast a ray from outside the canopy directly toward the canopy center to find exact mesh contact
-      const rayOrigin = worldCenter.clone().addScaledVector(radialDir, outerRadius);
-      const rayDir = radialDir.clone().negate();
-      canopySurfaceRaycaster.set(rayOrigin, rayDir);
-
-      const canopyMeshes = [];
-      canopyTarget.traverse((child) => {
-        if (child.isMesh) canopyMeshes.push(child);
-      });
-
-      const surfaceHits = canopySurfaceRaycaster.intersectObjects(canopyMeshes, false);
-      let worldContactPoint;
-      let worldNormal;
-
-      if (surfaceHits.length > 0) {
-        worldContactPoint = surfaceHits[0].point.clone();
-        if (surfaceHits[0].face) {
-          worldNormal = surfaceHits[0].face.normal
-            .clone()
-            .transformDirection(surfaceHits[0].object.matrixWorld)
-            .normalize();
-        } else {
-          worldNormal = radialDir.clone();
-        }
-      } else {
-        // Fallback ellipsoid surface contact if ray misses
-        const localCenter = modelPivot.worldToLocal(worldCenter.clone());
-        const pivotScale = modelPivot.scale.x || 1;
-        const rx = (worldSize.x / pivotScale) * 0.48;
-        const ry = (worldSize.y / pivotScale) * 0.48;
-        const rz = (worldSize.z / pivotScale) * 0.48;
-        const localFallback = new THREE.Vector3(
-          localCenter.x + radialDir.x * rx,
-          localCenter.y + radialDir.y * ry,
-          localCenter.z + radialDir.z * rz
-        );
-        worldContactPoint = modelPivot.localToWorld(localFallback);
-        worldNormal = radialDir.clone();
-      }
-
-      // Convert world surface contact point & normal into modelPivot local space so flower touches canopy
-      const localContact = modelPivot.worldToLocal(worldContactPoint.clone());
-      const pivotWorldQuat = new THREE.Quaternion();
-      modelPivot.getWorldQuaternion(pivotWorldQuat);
-      const localNormal = worldNormal.clone().applyQuaternion(pivotWorldQuat.clone().invert()).normalize();
-
-      flowerGroup.position.copy(localContact);
-      flowerGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), localNormal);
-      flowerGroup.rotateY(goldenAngle);
-      flowerGroup.userData.baseQuat = flowerGroup.quaternion.clone();
-
-      flowerGroup.userData.bloom = 0.02;
-      flowerGroup.userData.flowerIndex = state.flowerCount + 1;
-      flowerGroup.userData.transcript = spokenWords || 'Spoken reflection';
-      flowerGroup.userData.audioUrl = null;
-      flowerGroup.userData.peaks = [0.22, 0.48, 0.35, 0.62, 0.28];
-
-      // Invisible enlarged hit-sphere so tapping a flower on mobile is effortless
-      const hitMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.055, 8, 8),
-        new THREE.MeshBasicMaterial({ visible: false })
-      );
-      flowerGroup.add(hitMesh);
-
-      flowersGroup.add(flowerGroup);
-      state.flowerCount++;
-
-      soundscape.playBloomChime();
-      const previewText = spokenWords ? ` ("${spokenWords}")` : '';
-      showToast(`Flower #${state.flowerCount} bloomed on canopy${previewText}`);
-
-      // Trigger the BET 36 pop-up ad once 5 flowers have spawned on the 3D tree canopy
-      if (state.flowerCount >= 5 && !state.hasShownBet36Ad) {
-        state.hasShownBet36Ad = true;
-        setTimeout(() => {
-          openBet36AdPopup();
-        }, 700);
-      }
-
-      return flowerGroup;
-    }
-
-    /**
-     * ============================================================================
-     * 4C. "BET 36" POP-UP AD & SPOKEN VOICEOVER PLAYBACK (AdinMindTree_09.wav)
-     * ============================================================================
-     */
-    const BET36_AUDIO_FILENAME = 'AdinMindTree_09.wav';
-    const BET36_VOICE_SCRIPT =
-      "Feeling bored from work? It's time for a new adventure. Bet 36 has got you covered. VR table games, and live performances from your favorite Vocaloid. You'll never get bored of Bet 36. Eligible only in Ontario. If you or someone you know has problems with gambling, tap your Mind Tree bar now.";
-
-    let bet36UploadedAudioUrl = null;
-    let bet36SpeechProgressTimer = null;
-    let bet36HasExternalWav = false;
-
-    // Preload voices early so mobile browsers have English voices ready
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
-    }
-
-    // Unlock SpeechSynthesis on first user tap so auto-triggered ad voiceover plays on iOS/Android
-    function unlockSpeechEngine() {
-      if (!('speechSynthesis' in window)) return;
-      try {
-        const primer = new SpeechSynthesisUtterance('');
-        primer.volume = 0;
-        window.speechSynthesis.speak(primer);
-      } catch (e) {}
-    }
-
-    async function checkExternalBet36Wav() {
-      if (bet36UploadedAudioUrl) return bet36UploadedAudioUrl;
-      try {
-        const resp = await fetch(BET36_AUDIO_FILENAME, { method: 'HEAD' });
-        if (resp.ok) {
-          bet36HasExternalWav = true;
-          return BET36_AUDIO_FILENAME;
-        }
-      } catch (e) {}
-      return null;
-    }
-
-    function pickBestEnglishVoice() {
-      if (!('speechSynthesis' in window)) return null;
-      const voices = window.speechSynthesis.getVoices() || [];
-      return (
-        voices.find((v) => /en[-_](CA|US|GB)/i.test(v.lang) && /natural|google|samantha|daniel|alex|aria|guy/i.test(v.name)) ||
-        voices.find((v) => /en[-_](CA|US|GB)/i.test(v.lang)) ||
-        voices.find((v) => /^en/i.test(v.lang)) ||
-        voices[0] ||
-        null
-      );
-    }
-
-    function completeBet36PlaybackUI() {
-      clearInterval(bet36SpeechProgressTimer);
-      const exitBtn = document.getElementById('btn-close-bet36-ad');
-      const statusEl = document.getElementById('bet36-audio-status');
-      const progressBar = document.getElementById('bet36-progress-bar');
-      const exitHint = document.getElementById('bet36-exit-hint');
-
-      progressBar.style.width = '100%';
-      statusEl.textContent = 'Completed';
-      statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
-      exitBtn.classList.remove('hidden');
-      exitHint.textContent = 'Tap ✕ in the top right to return to your Mind Tree.';
-    }
-
-    async function playBet36VoiceRecording() {
-      const audioEl = document.getElementById('bet36-voice-audio');
-      const exitBtn = document.getElementById('btn-close-bet36-ad');
-      const statusEl = document.getElementById('bet36-audio-status');
-      const progressBar = document.getElementById('bet36-progress-bar');
-      const exitHint = document.getElementById('bet36-exit-hint');
-
-      clearInterval(bet36SpeechProgressTimer);
-      if ('speechSynthesis' in window) {
-        try { window.speechSynthesis.cancel(); } catch (e) {}
-      }
-      audioEl.pause();
-
-      // Hide exit button while voiceover is playing
-      exitBtn.classList.add('hidden');
-      statusEl.textContent = 'Playing voiceover…';
-      statusEl.className = 'font-mono-tech text-[11px] text-[#50fa7b]';
-      progressBar.style.width = '0%';
-      exitHint.textContent = 'Exit button will appear in the top right once the voiceover finishes playing.';
-
-      // 1. If AdinMindTree_09.wav is hosted or uploaded by the user, play the real WAV file directly
-      const wavSrc = await checkExternalBet36Wav();
-      if (wavSrc) {
-        audioEl.classList.remove('hidden');
-        if (audioEl.src !== wavSrc) {
-          audioEl.src = wavSrc;
-        }
-        audioEl.ontimeupdate = () => {
-          if (audioEl.duration && isFinite(audioEl.duration)) {
-            const pct = Math.min(100, (audioEl.currentTime / audioEl.duration) * 100);
-            progressBar.style.width = `${pct.toFixed(1)}%`;
-          }
-        };
-        audioEl.onended = completeBet36PlaybackUI;
-        audioEl.currentTime = 0;
-        audioEl.volume = 1.0;
-        audioEl.play().catch(() => {
-          statusEl.textContent = 'Tap Play Voiceover below';
-          statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
-        });
-        return;
-      }
-
-      // 2. Otherwise speak the clear voiceover directly via SpeechSynthesis (no synthetic hum)
-      audioEl.classList.add('hidden');
-      if ('speechSynthesis' in window) {
-        const utter = new SpeechSynthesisUtterance(BET36_VOICE_SCRIPT);
-        const chosenVoice = pickBestEnglishVoice();
-        if (chosenVoice) utter.voice = chosenVoice;
-        utter.lang = 'en-CA';
-        utter.rate = 1.02;
-        utter.pitch = 1.02;
-        utter.volume = 1.0;
-
-        const estDurationMs = 15500;
-        const startTs = performance.now();
-        let finished = false;
-
-        const finishOnce = () => {
-          if (finished) return;
-          finished = true;
-          completeBet36PlaybackUI();
-        };
-
-        utter.onboundary = (ev) => {
-          if (typeof ev.charIndex === 'number') {
-            const pct = Math.min(98, (ev.charIndex / BET36_VOICE_SCRIPT.length) * 100);
-            progressBar.style.width = `${pct.toFixed(1)}%`;
-          }
-        };
-
-        utter.onend = finishOnce;
-        utter.onerror = () => {
-          statusEl.textContent = 'Tap Play Voiceover below';
-          statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
-          clearInterval(bet36SpeechProgressTimer);
-        };
-
-        // Fallback progress & completion timer in case mobile Safari omits onend
-        bet36SpeechProgressTimer = setInterval(() => {
-          const elapsed = performance.now() - startTs;
-          const pct = Math.min(99, (elapsed / estDurationMs) * 100);
-          const currentWidth = parseFloat(progressBar.style.width) || 0;
-          if (pct > currentWidth) {
-            progressBar.style.width = `${pct.toFixed(1)}%`;
-          }
-          if (!window.speechSynthesis.speaking && elapsed > 2500) {
-            finishOnce();
-          } else if (elapsed >= estDurationMs + 1500) {
-            finishOnce();
-          }
-        }, 150);
-
-        window.speechSynthesis.speak(utter);
-      } else {
-        // Fallback timer if browser has no speech API
-        let pct = 0;
-        bet36SpeechProgressTimer = setInterval(() => {
-          pct += 2;
-          progressBar.style.width = `${Math.min(100, pct)}%`;
-          if (pct >= 100) completeBet36PlaybackUI();
-        }, 250);
-      }
-    }
-
-    function openBet36AdPopup() {
-      closeFlowerWordBubble();
-      const modal = document.getElementById('bet36-ad-modal');
-      modal.classList.remove('hidden');
-      playBet36VoiceRecording();
-    }
-
-    function closeBet36AdPopup() {
-      clearInterval(bet36SpeechProgressTimer);
-      const audioEl = document.getElementById('bet36-voice-audio');
-      if (audioEl) {
-        audioEl.pause();
-        audioEl.currentTime = 0;
-      }
-      if ('speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel();
-        } catch (e) {}
-      }
-      document.getElementById('bet36-ad-modal').classList.add('hidden');
-    }
-
-    /**
-     * ============================================================================
-     * 4B. FLOWER TAP RAYCASTING & FLOATING WORD BUBBLE VOICE PLAYER
-     * ============================================================================
-     */
-    const flowerRaycaster = new THREE.Raycaster();
-    const flowerWordBubble = document.getElementById('flower-word-bubble');
-    const bubbleWaveCanvas = document.getElementById('bubble-wave-canvas');
-    const bubbleWaveCtx = bubbleWaveCanvas ? bubbleWaveCanvas.getContext('2d') : null;
-    const bubbleTempVec = new THREE.Vector3();
-
-    function drawBubbleWaveform(peaks, progress = -1) {
-      if (!bubbleWaveCanvas || !bubbleWaveCtx) return;
-      const rect = bubbleWaveCanvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const width = Math.max(100, Math.floor(rect.width * dpr));
-      const height = Math.max(20, Math.floor(rect.height * dpr));
-
-      if (bubbleWaveCanvas.width !== width || bubbleWaveCanvas.height !== height) {
-        bubbleWaveCanvas.width = width;
-        bubbleWaveCanvas.height = height;
-      }
-
-      bubbleWaveCtx.clearRect(0, 0, width, height);
-      const samples = peaks && peaks.length > 0 ? peaks : [0.2, 0.45, 0.3, 0.55, 0.25];
-      const barCount = Math.min(34, Math.max(14, samples.length));
-      const step = samples.length / barCount;
-      const gap = 2.5 * dpr;
-      const barWidth = Math.max(2 * dpr, (width - gap * (barCount - 1)) / barCount);
-      const midY = height * 0.5;
-
-      for (let i = 0; i < barCount; i++) {
-        const sampleIdx = Math.min(samples.length - 1, Math.floor(i * step));
-        const amp = Math.max(0.14, Math.min(1, samples[sampleIdx]));
-        const barH = amp * (height * 0.84);
-        const x = i * (barWidth + gap);
-        const y = midY - barH * 0.5;
-        const barRatio = i / barCount;
-
-        bubbleWaveCtx.fillStyle =
-          progress >= 0 && barRatio <= progress ? '#f5b7c8' : 'rgba(245, 243, 238, 0.45)';
-
-        bubbleWaveCtx.beginPath();
-        if (bubbleWaveCtx.roundRect) {
-          bubbleWaveCtx.roundRect(x, y, barWidth, barH, barWidth * 0.5);
-        } else {
-          bubbleWaveCtx.rect(x, y, barWidth, barH);
-        }
-        bubbleWaveCtx.fill();
-      }
-    }
-
-    function openFlowerWordBubble(flowerGroup) {
-      if (!flowerGroup) return;
-      state.selectedFlower = flowerGroup;
-
-      const idx = flowerGroup.userData.flowerIndex || 1;
-      const transcript = flowerGroup.userData.transcript || 'Spoken reflection';
-      document.getElementById('bubble-flower-title').textContent = `Flower #${idx}`;
-      document.getElementById('bubble-transcript').textContent = `"${transcript}"`;
-
-      flowerWordBubble.classList.remove('hidden');
-      updateFlowerWordBubblePosition();
-      drawBubbleWaveform(flowerGroup.userData.peaks || state.waveformPeaks, -1);
-    }
-
-    function closeFlowerWordBubble() {
-      state.selectedFlower = null;
-      flowerWordBubble.classList.add('hidden');
-    }
-
-    function updateFlowerWordBubblePosition() {
-      if (!state.selectedFlower || flowerWordBubble.classList.contains('hidden')) return;
-      state.selectedFlower.updateWorldMatrix(true, false);
-      bubbleTempVec.setFromMatrixPosition(state.selectedFlower.matrixWorld);
-      bubbleTempVec.project(camera);
-
-      // Hide if behind camera
-      if (bubbleTempVec.z > 1) {
-        flowerWordBubble.style.opacity = '0';
-        return;
-      }
-
-      const x = (bubbleTempVec.x * 0.5 + 0.5) * window.innerWidth;
-      const y = (-bubbleTempVec.y * 0.5 + 0.5) * window.innerHeight;
-      const clampedX = THREE.MathUtils.clamp(x, 140, window.innerWidth - 140);
-      const clampedY = THREE.MathUtils.clamp(y, 110, window.innerHeight - 90);
-
-      flowerWordBubble.style.opacity = '1';
-      flowerWordBubble.style.left = `${clampedX}px`;
-      flowerWordBubble.style.top = `${clampedY}px`;
-    }
-
-    function handleFlowerTapAt(clientX, clientY) {
-      if (flowersGroup.children.length === 0) return false;
-      const rect = arCanvas.getBoundingClientRect();
-      const pointerNDC = new THREE.Vector2(
-        ((clientX - rect.left) / rect.width) * 2 - 1,
-        -((clientY - rect.top) / rect.height) * 2 + 1
-      );
-      flowerRaycaster.setFromCamera(pointerNDC, camera);
-      const hits = flowerRaycaster.intersectObjects(flowersGroup.children, true);
-      if (hits.length > 0) {
-        let obj = hits[0].object;
-        while (obj && obj.parent !== flowersGroup) {
-          obj = obj.parent;
-        }
-        if (obj) {
-          openFlowerWordBubble(obj);
-          return true;
-        }
-      }
-      return false;
-    }
-
-    /**
-     * Reconstructs the clean upright vertical Mind Tree (Trunk + Lush Canopy only)
-     */
     function buildDefaultMindTreeGLTFScene() {
       const root = new THREE.Group();
       root.name = 'MindTree_Vertical_Clean';
@@ -1401,9 +861,7 @@
         const v = new THREE.Vector3();
         for (let i = 0; i < pos.count; i++) {
           v.fromBufferAttribute(pos, i);
-          const n =
-            Math.sin(v.x * freq + v.y * (freq * 1.3)) *
-            Math.cos(v.z * freq - v.y * 2.1);
+          const n = Math.sin(v.x * freq + v.y * (freq * 1.3)) * Math.cos(v.z * freq - v.y * 2.1);
           v.x += n * ampX;
           v.y += n * ampY;
           v.z += n * ampZ;
@@ -1413,7 +871,6 @@
         return geo;
       }
 
-      // NODE 1: Cylinder — Branching terracotta tree trunk
       const treeTrunkMat = new THREE.MeshStandardMaterial({
         name: 'treeTrunk_Material',
         color: new THREE.Color(0.800, 0.201, 0.147),
@@ -1429,39 +886,35 @@
 
       const trunkCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0.05, -0.629, 0.05),
-        new THREE.Vector3(-0.12, 2.2, 0.08),
-        new THREE.Vector3(-0.35, 5.4, 0.12),
-        new THREE.Vector3(-0.55, 8.8, 0.15)
+        new THREE.Vector3(-0.08, 2.2, 0.06),
+        new THREE.Vector3(-0.22, 5.4, 0.08),
+        new THREE.Vector3(-0.35, 8.8, 0.10)
       ]);
-      const mainTrunkGeo = new THREE.TubeGeometry(trunkCurve, 20, 0.34, 12, false);
-      const mainTrunkMesh = new THREE.Mesh(mainTrunkGeo, treeTrunkMat);
+      const mainTrunkMesh = new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 20, 0.34, 12, false), treeTrunkMat);
       mainTrunkMesh.castShadow = true;
       mainTrunkMesh.receiveShadow = true;
       node1TrunkGroup.add(mainTrunkMesh);
 
       const limbLeftCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-0.22, 4.1, 0.08),
+        new THREE.Vector3(-0.18, 4.1, 0.08),
         new THREE.Vector3(-0.88, 6.2, -0.05),
         new THREE.Vector3(-1.45, 7.9, 0.18)
       ]);
-      const limbLeftGeo = new THREE.TubeGeometry(limbLeftCurve, 14, 0.20, 10, false);
-      const limbLeftMesh = new THREE.Mesh(limbLeftGeo, treeTrunkMat);
+      const limbLeftMesh = new THREE.Mesh(new THREE.TubeGeometry(limbLeftCurve, 14, 0.20, 10, false), treeTrunkMat);
       limbLeftMesh.castShadow = true;
       node1TrunkGroup.add(limbLeftMesh);
 
       const limbRightCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(-0.14, 3.6, 0.06),
-        new THREE.Vector3(0.12, 5.8, -0.12),
-        new THREE.Vector3(0.28, 7.4, 0.22)
+        new THREE.Vector3(0.45, 5.8, -0.12),
+        new THREE.Vector3(0.85, 7.4, 0.22)
       ]);
-      const limbRightGeo = new THREE.TubeGeometry(limbRightCurve, 12, 0.17, 10, false);
-      const limbRightMesh = new THREE.Mesh(limbRightGeo, treeTrunkMat);
+      const limbRightMesh = new THREE.Mesh(new THREE.TubeGeometry(limbRightCurve, 12, 0.17, 10, false), treeTrunkMat);
       limbRightMesh.castShadow = true;
       node1TrunkGroup.add(limbRightMesh);
 
       root.add(node1TrunkGroup);
 
-      // NODE 2: Sphere.003 — Lush green sculpted tree canopy
       const treeMat = new THREE.MeshStandardMaterial({
         name: 'tree_Material',
         color: new THREE.Color(0.052, 0.800, 0.094),
@@ -1472,21 +925,21 @@
 
       const node2CanopyGroup = new THREE.Group();
       node2CanopyGroup.name = 'Sphere.003';
-      node2CanopyGroup.position.set(-0.161, 0.754, 0.283);
+      node2CanopyGroup.position.set(-0.12, 0.754, 0.24);
       node2CanopyGroup.scale.set(0.164, 0.164, 0.164);
 
       const foliageLobes = [
-        { pos: [-0.43, 2.75, -0.86], rad: [2.15, 2.45, 1.75] },
+        { pos: [-0.25, 2.75, -0.75], rad: [2.15, 2.45, 1.85] },
         { pos: [-1.45, 1.95, -0.65], rad: [1.35, 1.55, 1.30] },
-        { pos: [0.85, 2.15, -0.55], rad: [1.25, 1.45, 1.25] },
-        { pos: [-0.35, 4.65, -0.75], rad: [1.55, 1.75, 1.35] },
-        { pos: [-0.65, 0.85, -1.10], rad: [1.45, 1.35, 1.35] }
+        { pos: [0.95, 2.15, -0.55], rad: [1.35, 1.55, 1.30] },
+        { pos: [-0.25, 4.65, -0.75], rad: [1.55, 1.75, 1.40] },
+        { pos: [-0.45, 0.95, -0.95], rad: [1.45, 1.35, 1.35] }
       ];
 
       foliageLobes.forEach((lobe, idx) => {
         const icoGeo = new THREE.IcosahedronGeometry(1.0, 3);
         icoGeo.scale(lobe.rad[0], lobe.rad[1], lobe.rad[2]);
-        sculptGeometry(icoGeo, 0.16, 0.18, 0.16, 2.1 + idx * 0.3);
+        sculptGeometry(icoGeo, 0.14, 0.16, 0.14, 2.1 + idx * 0.3);
         const lobeMesh = new THREE.Mesh(icoGeo, treeMat);
         lobeMesh.position.set(lobe.pos[0], lobe.pos[1], lobe.pos[2]);
         lobeMesh.castShadow = true;
@@ -1496,7 +949,6 @@
 
       root.add(node2CanopyGroup);
 
-      // Normalize bounding box so the tree stands upright vertically (+Y) with its base rooted at y = 0
       const bbox = new THREE.Box3().setFromObject(root);
       const center = bbox.getCenter(new THREE.Vector3());
       const size = bbox.getSize(new THREE.Vector3());
@@ -1509,90 +961,125 @@
       wrapper.scale.setScalar(normScale);
 
       animatedParts.canopy = node2CanopyGroup;
-
       return wrapper;
     }
 
     function setModelInPivot(object3D) {
-      while (modelPivot.children.length > 0) {
-        modelPivot.remove(modelPivot.children[0]);
-      }
+      const toRemove = modelPivot.children.filter((c) => c !== flowersGroup);
+      toRemove.forEach((c) => modelPivot.remove(c));
       modelPivot.add(object3D);
-      modelPivot.add(flowersGroup);
     }
 
     setModelInPivot(buildDefaultMindTreeGLTFScene());
 
     /**
      * ============================================================================
-     * 5. REAL-TIME VERTICAL RETICLE SCANNER & CAMERA TRANSLATION TRACKER
+     * 5. STATIONARY 6DoF WORLD ANCHOR TRACKER & FULL-VIEWPORT RETICLE SCANNER
      * ============================================================================
      */
+    class ReticleLockTracker {
+      constructor(threeCamera) {
+        this.camera = threeCamera;
+        this.raycaster = new THREE.Raycaster();
+        this.verticalPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.85);
+        this.lockedWorldPos = new THREE.Vector3(0, -0.18, -0.85);
+        this.baseCameraPos = new THREE.Vector3(0, 0.14, 0.35);
+      }
+
+      update(reticleNDC, apparentScale, isReticleVisible, isDemoMode, isTargetLocked, hasFixedWorldAnchor, sensorOffset, opticalOffset, deviceEuler, hasGyro) {
+        if (hasGyro) {
+          this.camera.rotation.x = THREE.MathUtils.lerp(this.camera.rotation.x, -deviceEuler.x, 0.22);
+          this.camera.rotation.y = THREE.MathUtils.lerp(this.camera.rotation.y, -deviceEuler.y, 0.22);
+          this.camera.rotation.z = THREE.MathUtils.lerp(this.camera.rotation.z, -deviceEuler.z, 0.22);
+        }
+
+        // Camera moves up/down & side-to-side in world space while tree stays stationary
+        const targetCamX = this.baseCameraPos.x + sensorOffset.x + opticalOffset.x;
+        const targetCamY = this.baseCameraPos.y + sensorOffset.y + opticalOffset.y;
+        const targetCamZ = this.baseCameraPos.z + sensorOffset.z;
+        this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, targetCamX, 0.2);
+        this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, targetCamY, 0.2);
+        this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, targetCamZ, 0.2);
+        this.camera.updateMatrixWorld();
+
+        if (!hasFixedWorldAnchor) {
+          if (isDemoMode) {
+            this.lockedWorldPos.set(0, -0.18, -0.82);
+          } else {
+            const rayCoords = isReticleVisible ? reticleNDC : new THREE.Vector2(0, 0);
+            this.raycaster.setFromCamera(rayCoords, this.camera);
+            const planeHit = new THREE.Vector3();
+            if (this.raycaster.ray.intersectPlane(this.verticalPlane, planeHit)) {
+              const depthZ = THREE.MathUtils.clamp(-0.85 / Math.max(0.4, apparentScale), -1.65, -0.45);
+              planeHit.z = depthZ;
+              planeHit.y -= 0.18;
+              this.lockedWorldPos.lerp(planeHit, 0.25);
+            }
+          }
+        }
+        return this.lockedWorldPos;
+      }
+
+      reset() {
+        this.lockedWorldPos.set(0, -0.18, -0.85);
+        this.camera.position.copy(this.baseCameraPos);
+        this.camera.rotation.set(0, 0, 0);
+      }
+    }
+
+    const reticleLockTracker = new ReticleLockTracker(camera);
+
     const videoEl = document.getElementById('camera-feed');
     const visionCanvas = document.getElementById('vision-canvas');
     const visionCtx = visionCanvas.getContext('2d', { willReadFrequently: true });
     let prevGrayFrame = null;
 
-    /**
-     * Tracks up/down and side-to-side camera translation from visual optical flow
-     * so the anchored 3D tree stays completely still in world coordinates.
-     */
     function updateVisualCameraTranslation(imgData, w, h) {
+      if (!state.hasFixedWorldAnchor) {
+        prevGrayFrame = null;
+        return;
+      }
       const d = imgData.data;
-      const currGray = new Float32Array(w * h);
-      for (let i = 0; i < currGray.length; i++) {
-        const px = i * 4;
-        currGray[i] = 0.299 * d[px] + 0.587 * d[px + 1] + 0.114 * d[px + 2];
+      const step = 4;
+      const gw = Math.floor(w / step);
+      const gh = Math.floor(h / step);
+      const curr = new Float32Array(gw * gh);
+      for (let y = 0; y < gh; y++) {
+        for (let x = 0; x < gw; x++) {
+          const idx = ((y * step) * w + (x * step)) * 4;
+          curr[y * gw + x] = (0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2]) / 255;
+        }
       }
 
-      if (prevGrayFrame && state.isTargetLocked) {
+      if (prevGrayFrame && prevGrayFrame.length === curr.length) {
         let bestDx = 0;
         let bestDy = 0;
-        let minSad = Infinity;
-
-        // Block-match central background region across +/-8 pixels for lateral & vertical shift
-        for (let dy = -8; dy <= 8; dy += 2) {
-          for (let dx = -8; dx <= 8; dx += 2) {
-            let sad = 0;
-            let samples = 0;
-            for (let y = 28; y < h - 28; y += 6) {
-              for (let x = 28; x < w - 28; x += 6) {
-                const idx1 = y * w + x;
-                const idx2 = (y + dy) * w + (x + dx);
-                sad += Math.abs(prevGrayFrame[idx1] - currGray[idx2]);
-                samples++;
+        let minDiff = Infinity;
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            let diff = 0;
+            let count = 0;
+            for (let y = 3; y < gh - 3; y++) {
+              for (let x = 3; x < gw - 3; x++) {
+                diff += Math.abs(curr[y * gw + x] - prevGrayFrame[(y + dy) * gw + (x + dx)]);
+                count++;
               }
             }
-            const avgSad = sad / samples;
-            if (avgSad < minSad) {
-              minSad = avgSad;
+            const avg = diff / Math.max(1, count);
+            if (avg < minDiff) {
+              minDiff = avg;
               bestDx = dx;
               bestDy = dy;
             }
           }
         }
-
-        if (minSad < 28 && (Math.abs(bestDx) >= 2 || Math.abs(bestDy) >= 2)) {
-          // Camera moving right shifts image left (-bestDx); camera moving up shifts image down (+bestDy)
-          const stepRight = (-bestDx / w) * 1.15;
-          const stepUp = (bestDy / h) * 1.15;
-          const worldStep = new THREE.Vector3(stepRight, stepUp, 0).applyEuler(state.deviceEuler);
-          state.opticalOffset.add(worldStep);
-          state.opticalOffset.x = THREE.MathUtils.clamp(state.opticalOffset.x, -1.2, 1.2);
-          state.opticalOffset.y = THREE.MathUtils.clamp(state.opticalOffset.y, -1.0, 1.0);
-          state.opticalOffset.z = THREE.MathUtils.clamp(state.opticalOffset.z, -1.0, 1.0);
+        if (minDiff < 0.16 && (bestDx !== 0 || bestDy !== 0)) {
+          state.opticalOffset.x = THREE.MathUtils.clamp(state.opticalOffset.x - bestDx * 0.018, -0.75, 0.75);
+          state.opticalOffset.y = THREE.MathUtils.clamp(state.opticalOffset.y + bestDy * 0.018, -0.65, 0.65);
         }
       }
-
-      prevGrayFrame = currGray;
+      prevGrayFrame = curr;
     }
-
-    const trackerMemory = {
-      hasLock: false,
-      lastCx: 80,
-      lastCy: 80,
-      lastHalfBox: 44
-    };
 
     function evaluatePatchScore(data, w, h, cx, cy, halfBox) {
       function sampleBoxLuma(nx0, ny0, nx1, ny1) {
@@ -1600,7 +1087,6 @@
         const py0 = cy - halfBox + ny0 * (halfBox * 2);
         const px1 = cx - halfBox + nx1 * (halfBox * 2);
         const py1 = cy - halfBox + ny1 * (halfBox * 2);
-
         const sx0 = Math.max(0, Math.floor(px0));
         const sy0 = Math.max(0, Math.floor(py0));
         const sx1 = Math.min(w - 1, Math.ceil(px1));
@@ -1617,133 +1103,58 @@
         return count > 0 ? sum / count : 128;
       }
 
-      const centerDotLuma = sampleBoxLuma(0.44, 0.45, 0.56, 0.55);
-      const innerWhiteLuma =
-        (sampleBoxLuma(0.32, 0.30, 0.68, 0.42) + sampleBoxLuma(0.32, 0.58, 0.68, 0.70)) * 0.5;
+      const centerDotLuma = sampleBoxLuma(0.455, 0.47, 0.545, 0.53);
+      const innerWhiteLuma = (sampleBoxLuma(0.34, 0.31, 0.66, 0.41) + sampleBoxLuma(0.34, 0.59, 0.66, 0.69)) * 0.5;
+      const innerBorderLuma = (
+        sampleBoxLuma(0.24, 0.23, 0.76, 0.28) +
+        sampleBoxLuma(0.24, 0.72, 0.76, 0.77) +
+        sampleBoxLuma(0.23, 0.24, 0.28, 0.76) +
+        sampleBoxLuma(0.72, 0.24, 0.77, 0.76)
+      ) * 0.25;
+      const midWhiteLuma = (sampleBoxLuma(0.18, 0.16, 0.82, 0.21) + sampleBoxLuma(0.18, 0.79, 0.82, 0.84)) * 0.5;
+      const outerBorderLuma = (
+        sampleBoxLuma(0.10, 0.09, 0.90, 0.14) +
+        sampleBoxLuma(0.10, 0.86, 0.90, 0.91) +
+        sampleBoxLuma(0.09, 0.10, 0.14, 0.90) +
+        sampleBoxLuma(0.86, 0.10, 0.91, 0.90)
+      ) * 0.25;
 
-      const innerBorderTop = sampleBoxLuma(0.22, 0.21, 0.78, 0.28);
-      const innerBorderBot = sampleBoxLuma(0.22, 0.72, 0.78, 0.79);
-      const innerBorderLeft = sampleBoxLuma(0.21, 0.22, 0.28, 0.78);
-      const innerBorderRight = sampleBoxLuma(0.72, 0.22, 0.79, 0.78);
-      const innerBorderLuma =
-        (innerBorderTop + innerBorderBot + innerBorderLeft + innerBorderRight) * 0.25;
+      const c1 = Math.max(0, (innerWhiteLuma - centerDotLuma) / 135);
+      const c2 = Math.max(0, (innerWhiteLuma - innerBorderLuma) / 135);
+      const c3 = Math.max(0, (midWhiteLuma - innerBorderLuma) / 135);
+      const c4 = Math.max(0, (midWhiteLuma - outerBorderLuma) / 135);
 
-      const midWhiteLuma =
-        (sampleBoxLuma(0.16, 0.15, 0.84, 0.21) + sampleBoxLuma(0.16, 0.79, 0.84, 0.85)) * 0.5;
-
-      const outerBorderTop = sampleBoxLuma(0.08, 0.08, 0.92, 0.14);
-      const outerBorderBot = sampleBoxLuma(0.08, 0.86, 0.92, 0.92);
-      const outerBorderLeft = sampleBoxLuma(0.08, 0.08, 0.14, 0.92);
-      const outerBorderRight = sampleBoxLuma(0.86, 0.08, 0.92, 0.92);
-      const outerBorderLuma =
-        (outerBorderTop + outerBorderBot + outerBorderLeft + outerBorderRight) * 0.25;
-
-      // Adaptive contrast normalization against local white ring brightness
-      const localPeakWhite = Math.max(innerWhiteLuma, midWhiteLuma, 60);
-      const denom = Math.max(48, localPeakWhite * 0.68);
-
-      const c1 = Math.max(0, (innerWhiteLuma - centerDotLuma) / denom);
-      const c2 = Math.max(0, (innerWhiteLuma - innerBorderLuma) / denom);
-      const c3 = Math.max(0, (midWhiteLuma - innerBorderLuma) / denom);
-      const c4 = Math.max(0, (midWhiteLuma - outerBorderLuma) / denom);
-
-      // Verify upright vertical square symmetry (top/bottom & left/right borders balanced)
-      const innerVar =
-        Math.abs(innerBorderTop - innerBorderBot) + Math.abs(innerBorderLeft - innerBorderRight);
-      const outerVar =
-        Math.abs(outerBorderTop - outerBorderBot) + Math.abs(outerBorderLeft - outerBorderRight);
-      const symmetryBonus = Math.max(0, 1 - (innerVar + outerVar) / 210);
-
-      const rawScore =
-        Math.min(1, c1) * 0.28 +
-        Math.min(1, c2) * 0.24 +
-        Math.min(1, c3) * 0.22 +
-        Math.min(1, c4) * 0.26;
-
-      return Math.min(1, rawScore * (0.65 + 0.35 * symmetryBonus));
+      return Math.min(1, Math.min(1, c1) * 0.28 + Math.min(1, c2) * 0.24 + Math.min(1, c3) * 0.22 + Math.min(1, c4) * 0.26);
     }
 
-    function scanFullViewportReticle(imgData, w, h) {
+    function scanReticlePose(imgData, w, h) {
       const data = imgData.data;
+      const offsets = [[0, 0], [-16, 0], [16, 0], [0, -16], [0, 16], [-26, -20], [26, -20], [-26, 20], [26, 20]];
+      const scales = [44, 58, 70];
       let bestScore = 0;
-      let bestCx = trackerMemory.lastCx;
-      let bestCy = trackerMemory.lastCy;
-      let bestHalfBox = trackerMemory.lastHalfBox;
+      let bestCx = w * 0.5;
+      let bestCy = h * 0.5;
+      let bestHalfBox = 58;
 
-      if (trackerMemory.hasLock) {
-        // Track locally around the locked reticle so background shapes never cause jumping
-        const localScales = [
-          Math.max(22, trackerMemory.lastHalfBox - 5),
-          trackerMemory.lastHalfBox,
-          Math.min(72, trackerMemory.lastHalfBox + 5)
-        ];
-        for (let s = 0; s < localScales.length; s++) {
-          const hb = localScales[s];
-          for (let dy = -12; dy <= 12; dy += 4) {
-            for (let dx = -12; dx <= 12; dx += 4) {
-              const cx = THREE.MathUtils.clamp(trackerMemory.lastCx + dx, hb + 4, w - hb - 4);
-              const cy = THREE.MathUtils.clamp(trackerMemory.lastCy + dy, hb + 4, h - hb - 4);
-              const score = evaluatePatchScore(data, w, h, cx, cy, hb);
-              if (score > bestScore) {
-                bestScore = score;
-                bestCx = cx;
-                bestCy = cy;
-                bestHalfBox = hb;
-              }
-            }
-          }
-        }
-      } else {
-        // Initial acquisition scan across the viewfinder
-        const scales = [28, 38, 48, 58];
-        for (let s = 0; s < scales.length; s++) {
-          const hb = scales[s];
-          const minX = hb + 6;
-          const maxX = w - hb - 6;
-          const minY = hb + 6;
-          const maxY = h - hb - 6;
-          for (let cy = minY; cy <= maxY; cy += 10) {
-            for (let cx = minX; cx <= maxX; cx += 10) {
-              const score = evaluatePatchScore(data, w, h, cx, cy, hb);
-              if (score > bestScore) {
-                bestScore = score;
-                bestCx = cx;
-                bestCy = cy;
-                bestHalfBox = hb;
-              }
-            }
+      for (let s = 0; s < scales.length; s++) {
+        for (let i = 0; i < offsets.length; i++) {
+          const cx = w * 0.5 + offsets[i][0];
+          const cy = h * 0.5 + offsets[i][1];
+          const score = evaluatePatchScore(data, w, h, cx, cy, scales[s]);
+          if (score > bestScore) {
+            bestScore = score;
+            bestCx = cx;
+            bestCy = cy;
+            bestHalfBox = scales[s];
           }
         }
       }
-
-      if (bestScore >= state.lockThreshold * 0.85) {
-        trackerMemory.hasLock = true;
-        trackerMemory.lastCx = THREE.MathUtils.lerp(trackerMemory.lastCx, bestCx, 0.35);
-        trackerMemory.lastCy = THREE.MathUtils.lerp(trackerMemory.lastCy, bestCy, 0.35);
-        trackerMemory.lastHalfBox = THREE.MathUtils.lerp(trackerMemory.lastHalfBox, bestHalfBox, 0.25);
-      } else if (bestScore < state.lockThreshold * 0.5) {
-        trackerMemory.hasLock = false;
-      }
-
-      // Map 160x160 vision space to screen NDC (-1..1) accounting for object-fit: cover aspect ratio
-      const vw = videoEl.videoWidth || window.innerWidth;
-      const vh = videoEl.videoHeight || window.innerHeight;
-      const screenAspect = window.innerWidth / window.innerHeight;
-      const videoAspect = vw / vh;
-
-      let scaleX = 1.0;
-      let scaleY = 1.0;
-      if (videoAspect > screenAspect) {
-        scaleX = videoAspect / screenAspect;
-      } else {
-        scaleY = screenAspect / videoAspect;
-      }
-
-      const ndcX = ((trackerMemory.lastCx / w) * 2 - 1) * scaleX;
-      const ndcY = -(((trackerMemory.lastCy / h) * 2 - 1) * scaleY);
-      const apparentScale = trackerMemory.lastHalfBox / 44;
-
-      return { score: bestScore, ndcX, ndcY, apparentScale };
+      return {
+        score: bestScore,
+        ndcX: ((bestCx / w) - 0.5) * 1.3,
+        ndcY: -((bestCy / h) - 0.5) * 1.3,
+        apparentScale: bestHalfBox / 58
+      };
     }
 
     function computeCustomImageMatch(imgData) {
@@ -1758,24 +1169,26 @@
         normA += luma * luma;
         normB += sig[i] * sig[i];
       }
-      if (normA === 0 || normB === 0) return 0;
-      return Math.max(0, Math.min(1, dot / (Math.sqrt(normA) * Math.sqrt(normB))));
+      return (normA === 0 || normB === 0) ? 0 : Math.max(0, Math.min(1, dot / (Math.sqrt(normA) * Math.sqrt(normB))));
     }
 
     let lastVisionTick = 0;
     function processCameraVision(now) {
       if (!state.isCameraActive || videoEl.readyState < 2) return;
-      if (now - lastVisionTick < 75) return;
+      if (now - lastVisionTick < 80) return;
       lastVisionTick = now;
 
       const vw = videoEl.videoWidth;
       const vh = videoEl.videoHeight;
       if (!vw || !vh) return;
 
-      visionCtx.drawImage(videoEl, 0, 0, vw, vh, 0, 0, 160, 160);
+      const cropSize = Math.min(vw, vh) * 0.76;
+      const sx = (vw - cropSize) * 0.5;
+      const sy = (vh - cropSize) * 0.5;
+
+      visionCtx.drawImage(videoEl, sx, sy, cropSize, cropSize, 0, 0, 160, 160);
       const frame = visionCtx.getImageData(0, 0, 160, 160);
 
-      // Update camera up/down & side-to-side world position from optical flow
       updateVisualCameraTranslation(frame, 160, 160);
 
       let score = 0;
@@ -1783,17 +1196,12 @@
         score = computeCustomImageMatch(frame);
         state.reticleNDC.set(0, 0);
         state.reticleApparentScale = 1.0;
-        state.reticleVisibleInFrame = score >= state.lockThreshold * 0.85;
       } else {
-        const result = scanFullViewportReticle(frame, 160, 160);
-        score = result.score;
-        if (score >= state.lockThreshold * 0.85) {
-          state.reticleNDC.lerp(new THREE.Vector2(result.ndcX, result.ndcY), 0.35);
-          state.reticleApparentScale = THREE.MathUtils.lerp(
-            state.reticleApparentScale,
-            result.apparentScale,
-            0.3
-          );
+        const res = scanReticlePose(frame, 160, 160);
+        score = res.score;
+        if (score >= state.lockThreshold * 0.8) {
+          state.reticleNDC.lerp(new THREE.Vector2(res.ndcX, res.ndcY), 0.35);
+          state.reticleApparentScale = THREE.MathUtils.lerp(state.reticleApparentScale, res.apparentScale, 0.3);
           state.reticleVisibleInFrame = true;
         } else {
           state.reticleVisibleInFrame = false;
@@ -1803,12 +1211,11 @@
       state.matchScore = score;
       document.getElementById('telemetry-score').textContent = `${Math.round(score * 100)}%`;
 
-      // Automatic Hands-Free Spawning when reticle is detected
       if (score >= state.lockThreshold) {
         state.consecutiveHits++;
         state.consecutiveMisses = 0;
-        if (state.consecutiveHits >= 1 && !state.isTargetLocked) {
-          autoSpawnMindTree('Mind Tree anchored on reticle');
+        if (state.consecutiveHits >= 2 && !state.isTargetLocked) {
+          autoSpawnMindTree('Mind Tree anchored in space');
         }
       } else {
         state.consecutiveMisses++;
@@ -1816,219 +1223,438 @@
       }
     }
 
-    function autoSpawnMindTree(reason = 'Mind Tree locked on reticle') {
-      const wasAlreadyLocked = state.isTargetLocked;
+    function autoSpawnMindTree(reason = 'Mind Tree anchored in space') {
+      const wasLocked = state.isTargetLocked;
       state.isTargetLocked = true;
+      state.hasFixedWorldAnchor = true;
       worldAnchorGroup.visible = true;
-      demoReticleCardGroup.visible = state.isDemoMode;
 
-      if (!wasAlreadyLocked) {
-        state.bloomProgress = 0.04;
+      if (!wasLocked) {
+        state.bloomProgress = 0.05;
         state.sensorOffset.set(0, 0, 0);
         state.opticalOffset.set(0, 0, 0);
-        // Capture the exact 3D world position on the reticle at spawn time and lock it stationary
-        state.hasFixedWorldAnchor = false;
-        const spawnPos = reticleLockTracker.update(
-          state.reticleNDC,
-          state.reticleApparentScale,
-          state.reticleVisibleInFrame,
-          state.isDemoMode,
-          false,
-          false,
-          state.sensorOffset,
-          state.opticalOffset,
-          state.deviceEuler,
-          state.hasGyro
-        );
-        state.anchorPos.copy(spawnPos);
-        worldAnchorGroup.position.copy(state.anchorPos);
-        state.hasFixedWorldAnchor = true;
-
         soundscape.playBloomChime();
-        showToast('Mind Tree anchored in space — move camera up/down or side-to-side.');
+        showToast('Mind Tree rooted in 3D space.');
       }
 
-      document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#3b5243]';
-      document.getElementById('status-title').textContent = reason;
-      document.getElementById('status-subtitle').textContent = state.isDemoMode
-        ? 'Standing upright on virtual Reticle V3 card'
-        : 'Stationary world anchor • Speak up to 10 words to bloom';
       document.getElementById('reticle-box').classList.add('locked');
-      const ghostEl = document.getElementById('ghost-reticle-guide');
-      if (ghostEl) ghostEl.style.opacity = '0.0';
       document.getElementById('scan-wave').style.display = 'none';
-      document.getElementById('reticle-container').style.opacity = '0.20';
-      document.getElementById('reticle-hint').textContent = 'Tree is anchored in space • Move camera around to inspect';
+      document.getElementById('reticle-container').style.opacity = '0.22';
+      document.getElementById('reticle-hint').textContent = 'Tap Speak to bloom a flower • Tap any flower to replay';
     }
 
     function resetAndRescanSurface() {
       state.isTargetLocked = false;
       state.hasFixedWorldAnchor = false;
-      state.isDemoMode = false;
       state.consecutiveHits = 0;
       state.consecutiveMisses = 0;
       state.bloomProgress = 0;
       state.baseAlpha = null;
       state.sensorOffset.set(0, 0, 0);
       state.opticalOffset.set(0, 0, 0);
-      prevGrayFrame = null;
-      trackerMemory.hasLock = false;
-      trackerMemory.lastCx = 80;
-      trackerMemory.lastCy = 80;
-      trackerMemory.lastHalfBox = 44;
-      demoReticleCardGroup.visible = false;
       reticleLockTracker.reset();
-
-      // Clear spoken flowers on full reset
-      while (flowersGroup.children.length > 0) {
-        flowersGroup.remove(flowersGroup.children[0]);
-      }
-      state.flowerCount = 0;
-      state.hasShownBet36Ad = false;
       closeFlowerWordBubble();
-      closeBet36AdPopup();
-      if (state.recordedAudioEl) {
-        state.recordedAudioEl.pause();
-        state.recordedAudioEl = null;
-      }
-      if (state.recordedAudioUrl) {
-        URL.revokeObjectURL(state.recordedAudioUrl);
-        state.recordedAudioUrl = null;
-      }
-      state.waveformPeaks = [];
-      document.getElementById('voice-wave-card').classList.add('hidden');
 
       if (state.isCameraActive) {
         worldAnchorGroup.visible = false;
       }
 
-      document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#a8c0ae] animate-pulse';
-      document.getElementById('status-title').textContent = 'Scanning vertical reticle…';
-      document.getElementById('status-subtitle').textContent = 'Hold reticle vertically to root tree';
       document.getElementById('reticle-box').classList.remove('locked');
       document.getElementById('scan-wave').style.display = 'block';
       document.getElementById('reticle-container').style.opacity = '1';
       document.getElementById('reticle-hint').innerHTML = 'Hold <span class="text-[#a8c0ae] font-semibold">Reticle for Mind TreeV3</span> vertically — spawns vertically on reticle';
-      showToast('Ready to scan — point at the vertical reticle.');
+      showToast('Re-scanning — point at reticle to anchor tree.');
     }
 
     /**
      * ============================================================================
-     * 5B. VOICE WAVEFORM RECORDER, PLAYBACK & SPEECH-TO-FLOWER BLOOM (<=10 WORDS)
+     * 5B. VOICE-TO-FLOWER BLOOMING, WORD BUBBLE PLAYBACK & BET 36 AD POP-UP
      * ============================================================================
      */
-    const voiceWaveCanvas = document.getElementById('voice-wave-canvas');
-    const voiceWaveCtx = voiceWaveCanvas ? voiceWaveCanvas.getContext('2d') : null;
-    let voicePlaybackAnimId = null;
+    const canopySurfaceRaycaster = new THREE.Raycaster();
+    const petalPalette = [0xff8fab, 0xffc8dd, 0xffd166, 0xcbd5ff, 0xffafcc, 0xfde4cf];
 
-    function drawVoiceWaveform(peaks, progress = -1, isLive = false) {
-      if (!voiceWaveCanvas || !voiceWaveCtx) return;
-      const rect = voiceWaveCanvas.getBoundingClientRect();
+    function buildFlowerMesh(flowerIndex) {
+      const flower = new THREE.Group();
+      const petalColor = petalPalette[(flowerIndex - 1) % petalPalette.length];
+      const petalMat = new THREE.MeshStandardMaterial({
+        color: petalColor,
+        roughness: 0.4,
+        metalness: 0.05,
+        side: THREE.DoubleSide
+      });
+      const centerMat = new THREE.MeshStandardMaterial({
+        color: 0xffd166,
+        emissive: 0x664400,
+        emissiveIntensity: 0.35,
+        roughness: 0.35
+      });
+
+      const petalGeo = new THREE.SphereGeometry(0.014, 10, 8);
+      petalGeo.scale(0.65, 0.25, 1.35);
+
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const petal = new THREE.Mesh(petalGeo, petalMat);
+        petal.position.set(Math.cos(angle) * 0.014, 0.004, Math.sin(angle) * 0.014);
+        petal.rotation.y = -angle;
+        petal.rotation.z = 0.22;
+        flower.add(petal);
+      }
+
+      const stamen = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 10), centerMat);
+      stamen.position.y = 0.007;
+      flower.add(stamen);
+
+      // Invisible enlarged tap hit sphere so mobile taps reliably select the flower
+      const hitMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.036, 8, 8),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hitMesh.userData.parentFlower = flower;
+      flower.add(hitMesh);
+
+      return flower;
+    }
+
+    function spawnFlowerOnTree(spokenWords = 'Spoken reflection') {
+      if (!state.isTargetLocked) {
+        autoSpawnMindTree('Mind Tree anchored in space');
+      }
+
+      state.flowerCount += 1;
+      const flower = buildFlowerMesh(state.flowerCount);
+      flower.userData.index = state.flowerCount;
+      flower.userData.transcript = spokenWords || `Reflection #${state.flowerCount}`;
+      flower.userData.bloom = 0.05;
+      flower.userData.audioUrl = null;
+      flower.userData.peaks = [];
+
+      // Find canopy meshes in modelPivot to raycast flush onto the outer canopy surface
+      modelPivot.updateMatrixWorld(true);
+      const canopyMeshes = [];
+      modelPivot.traverse((child) => {
+        if (child.isMesh && !flowersGroup.children.includes(child) && child.parent !== flowersGroup) {
+          if (child.parent && child.parent.name === 'Sphere.003') {
+            canopyMeshes.push(child);
+          }
+        }
+      });
+
+      const goldenAngle = state.flowerCount * 2.3999632;
+      const elev = 0.15 + ((state.flowerCount * 0.29) % 0.65);
+      const dir = new THREE.Vector3(
+        Math.cos(goldenAngle) * Math.cos(elev),
+        Math.sin(elev),
+        Math.sin(goldenAngle) * Math.cos(elev)
+      ).normalize();
+
+      const canopyCenterLocal = new THREE.Vector3(0, 0.42, 0);
+      if (canopyMeshes.length > 0) {
+        const canopyBox = new THREE.Box3();
+        canopyMeshes.forEach((m) => canopyBox.expandByObject(m));
+        const worldCenter = canopyBox.getCenter(new THREE.Vector3());
+        canopyCenterLocal.copy(modelPivot.worldToLocal(worldCenter));
+
+        const worldOrigin = modelPivot.localToWorld(canopyCenterLocal.clone().addScaledVector(dir, 0.85));
+        const worldTarget = modelPivot.localToWorld(canopyCenterLocal.clone());
+        const worldRayDir = worldTarget.sub(worldOrigin).normalize();
+
+        canopySurfaceRaycaster.set(worldOrigin, worldRayDir);
+        const hits = canopySurfaceRaycaster.intersectObjects(canopyMeshes, false);
+
+        if (hits.length > 0) {
+          const hitLocal = modelPivot.worldToLocal(hits[0].point.clone());
+          const outwardNormal = hits[0].face
+            ? hits[0].face.normal.clone().transformDirection(hits[0].object.matrixWorld).normalize()
+            : dir.clone();
+          const localNormal = outwardNormal
+            .applyQuaternion(modelPivot.getWorldQuaternion(new THREE.Quaternion()).invert())
+            .normalize();
+
+          // Seat flower directly touching the canopy surface (+0.002m) with front facing outward
+          flower.position.copy(hitLocal).addScaledVector(localNormal, 0.002);
+          const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), localNormal);
+          flower.quaternion.copy(quat);
+          flower.userData.baseQuat = quat.clone();
+        } else {
+          flower.position.copy(canopyCenterLocal).addScaledVector(dir, 0.14);
+          const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+          flower.quaternion.copy(quat);
+          flower.userData.baseQuat = quat.clone();
+        }
+      } else {
+        flower.position.copy(canopyCenterLocal).addScaledVector(dir, 0.14);
+        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        flower.quaternion.copy(quat);
+        flower.userData.baseQuat = quat.clone();
+      }
+
+      flowersGroup.add(flower);
+      soundscape.playBloomChime();
+      showToast(`Flower #${state.flowerCount} bloomed on the canopy!`);
+
+      // Trigger BET 36 pop-up ad when 5 flowers have spawned on the tree canopy
+      if (state.flowerCount >= 5 && !state.hasShownBet36Ad) {
+        state.hasShownBet36Ad = true;
+        setTimeout(() => showBet36AdPopup(), 650);
+      }
+
+      return flower;
+    }
+
+    function drawVoiceWaveform(peaks, progressRatio = -1, isLive = false, targetCanvasId = 'voice-wave-canvas') {
+      const canvas = document.getElementById(targetCanvasId);
+      if (!canvas) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const width = Math.max(120, Math.floor(rect.width * dpr));
-      const height = Math.max(24, Math.floor(rect.height * dpr));
-
-      if (voiceWaveCanvas.width !== width || voiceWaveCanvas.height !== height) {
-        voiceWaveCanvas.width = width;
-        voiceWaveCanvas.height = height;
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(120, Math.floor(rect.width || 200));
+      const h = Math.max(18, Math.floor(rect.height || 24));
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
       }
+      const ctx = canvas.getContext('2d');
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
 
-      voiceWaveCtx.clearRect(0, 0, width, height);
-      const samples = peaks.length > 0 ? peaks : [0.12, 0.2, 0.14, 0.24, 0.16];
-      const barCount = Math.min(48, Math.max(16, samples.length));
-      const step = samples.length / barCount;
-      const gap = 3 * dpr;
-      const barWidth = Math.max(2 * dpr, (width - gap * (barCount - 1)) / barCount);
-      const midY = height * 0.5;
+      const bars = peaks.length > 0 ? peaks : [0.2, 0.4, 0.6, 0.35, 0.5, 0.3];
+      const count = bars.length;
+      const gap = 2;
+      const barW = Math.max(2, (w - gap * (count - 1)) / count);
 
-      for (let i = 0; i < barCount; i++) {
-        const sampleIdx = Math.min(samples.length - 1, Math.floor(i * step));
-        const amp = Math.max(0.12, Math.min(1, samples[sampleIdx]));
-        const barH = amp * (height * 0.84);
-        const x = i * (barWidth + gap);
-        const y = midY - barH * 0.5;
-        const barRatio = i / barCount;
-
-        if (isLive) {
-          voiceWaveCtx.fillStyle = 'rgba(245, 183, 200, 0.92)';
-        } else if (progress >= 0 && barRatio <= progress) {
-          voiceWaveCtx.fillStyle = '#a8c0ae';
-        } else {
-          voiceWaveCtx.fillStyle = 'rgba(245, 243, 238, 0.45)';
-        }
-
-        voiceWaveCtx.beginPath();
-        if (voiceWaveCtx.roundRect) {
-          voiceWaveCtx.roundRect(x, y, barWidth, barH, barWidth * 0.5);
-        } else {
-          voiceWaveCtx.rect(x, y, barWidth, barH);
-        }
-        voiceWaveCtx.fill();
+      for (let i = 0; i < count; i++) {
+        const amp = Math.max(0.14, Math.min(1, bars[i]));
+        const barH = amp * (h - 4);
+        const x = i * (barW + gap);
+        const y = (h - barH) * 0.5;
+        const played = progressRatio >= 0 && i / count <= progressRatio;
+        ctx.fillStyle = isLive ? '#f5b7c8' : played ? '#a8c0ae' : 'rgba(255,255,255,0.42)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, 2);
+        ctx.fill();
       }
+      ctx.restore();
     }
 
     function updatePlayPauseIcons(isPlaying) {
       document.getElementById('icon-voice-play').classList.toggle('hidden', isPlaying);
       document.getElementById('icon-voice-pause').classList.toggle('hidden', !isPlaying);
-      const bubblePlay = document.getElementById('icon-bubble-play');
-      const bubblePause = document.getElementById('icon-bubble-pause');
-      if (bubblePlay) bubblePlay.classList.toggle('hidden', isPlaying);
-      if (bubblePause) bubblePause.classList.toggle('hidden', !isPlaying);
+      document.getElementById('icon-bubble-play').classList.toggle('hidden', isPlaying);
+      document.getElementById('icon-bubble-pause').classList.toggle('hidden', !isPlaying);
     }
 
-    function playRecordedVoice(customUrl = null, customPeaks = null) {
-      const targetUrl = customUrl || (state.selectedFlower && state.selectedFlower.userData.audioUrl) || state.recordedAudioUrl;
-      const targetPeaks = customPeaks || (state.selectedFlower && state.selectedFlower.userData.peaks) || state.waveformPeaks;
+    function playRecordedVoice(overrideUrl = null, overridePeaks = null) {
+      const url = overrideUrl || (state.selectedFlower && state.selectedFlower.userData.audioUrl) || state.recordedAudioUrl;
+      const peaks = overridePeaks || (state.selectedFlower && state.selectedFlower.userData.peaks) || state.waveformPeaks;
 
-      if (!targetUrl) {
-        showToast('Record your voice first to play it back.');
+      if (!url) {
+        showToast('No audio recording available for this flower.');
         return;
       }
 
-      if (state.recordedAudioEl && !state.recordedAudioEl.paused && state.recordedAudioEl.src === targetUrl) {
-        state.recordedAudioEl.pause();
-        updatePlayPauseIcons(false);
-        cancelAnimationFrame(voicePlaybackAnimId);
+      if (state.recordedAudioEl && !overrideUrl) {
+        if (!state.recordedAudioEl.paused) {
+          state.recordedAudioEl.pause();
+          updatePlayPauseIcons(false);
+          return;
+        }
+        state.recordedAudioEl.play().catch(() => {});
+        updatePlayPauseIcons(true);
         return;
       }
 
       if (state.recordedAudioEl) {
         state.recordedAudioEl.pause();
+        state.recordedAudioEl = null;
       }
 
-      state.recordedAudioEl = new Audio(targetUrl);
-      state.recordedAudioEl.onended = () => {
-        updatePlayPauseIcons(false);
-        cancelAnimationFrame(voicePlaybackAnimId);
-        drawVoiceWaveform(state.waveformPeaks, -1, false);
-        drawBubbleWaveform(targetPeaks, -1);
+      const audio = new Audio(url);
+      state.recordedAudioEl = audio;
+      updatePlayPauseIcons(true);
+
+      const syncWave = () => {
+        if (!state.recordedAudioEl || state.recordedAudioEl !== audio) return;
+        const ratio = audio.duration > 0 ? audio.currentTime / audio.duration : 0;
+        drawVoiceWaveform(peaks, ratio, false, 'voice-wave-canvas');
+        drawVoiceWaveform(peaks, ratio, false, 'bubble-wave-canvas');
+        if (!audio.paused && !audio.ended) {
+          requestAnimationFrame(syncWave);
+        }
       };
 
-      state.recordedAudioEl.currentTime = 0;
-      state.recordedAudioEl.play().then(() => {
-        updatePlayPauseIcons(true);
-        const tickPlayback = () => {
-          if (!state.recordedAudioEl || state.recordedAudioEl.paused) return;
-          const dur = state.recordedAudioEl.duration || 1;
-          const progress = Math.min(1, state.recordedAudioEl.currentTime / dur);
-          drawVoiceWaveform(state.waveformPeaks, progress, false);
-          drawBubbleWaveform(targetPeaks, progress);
-          voicePlaybackAnimId = requestAnimationFrame(tickPlayback);
-        };
-        tickPlayback();
-      }).catch(() => {
-        showToast('Tap play to hear your recorded voice.');
-      });
+      audio.onended = () => {
+        updatePlayPauseIcons(false);
+        drawVoiceWaveform(peaks, -1, false, 'voice-wave-canvas');
+        drawVoiceWaveform(peaks, -1, false, 'bubble-wave-canvas');
+      };
+
+      audio.play().then(() => syncWave()).catch(() => updatePlayPauseIcons(false));
+    }
+
+    const tapRaycaster = new THREE.Raycaster();
+    function handleFlowerTapAt(clientX, clientY) {
+      if (!worldAnchorGroup.visible || flowersGroup.children.length === 0) return;
+      const ndc = new THREE.Vector2(
+        (clientX / window.innerWidth) * 2 - 1,
+        -(clientY / window.innerHeight) * 2 + 1
+      );
+      tapRaycaster.setFromCamera(ndc, camera);
+      const hits = tapRaycaster.intersectObjects(flowersGroup.children, true);
+      if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj && obj.parent !== flowersGroup) {
+          obj = obj.parent;
+        }
+        if (obj) {
+          openFlowerWordBubble(obj);
+          if (obj.userData.audioUrl) {
+            playRecordedVoice(obj.userData.audioUrl, obj.userData.peaks);
+          }
+        }
+      }
+    }
+
+    function openFlowerWordBubble(flower) {
+      state.selectedFlower = flower;
+      const bubble = document.getElementById('flower-word-bubble');
+      document.getElementById('bubble-flower-title').textContent = `Flower #${flower.userData.index}`;
+      document.getElementById('bubble-transcript').textContent = `"${flower.userData.transcript}"`;
+      bubble.classList.remove('hidden');
+      drawVoiceWaveform(flower.userData.peaks || [], -1, false, 'bubble-wave-canvas');
+      updateFlowerWordBubblePosition();
+    }
+
+    function closeFlowerWordBubble() {
+      state.selectedFlower = null;
+      document.getElementById('flower-word-bubble').classList.add('hidden');
+    }
+
+    function updateFlowerWordBubblePosition() {
+      const bubble = document.getElementById('flower-word-bubble');
+      if (!state.selectedFlower || bubble.classList.contains('hidden')) return;
+      const worldPos = new THREE.Vector3();
+      state.selectedFlower.getWorldPosition(worldPos);
+      worldPos.project(camera);
+
+      const x = (worldPos.x * 0.5 + 0.5) * window.innerWidth;
+      const y = (-worldPos.y * 0.5 + 0.5) * window.innerHeight;
+      bubble.style.left = `${THREE.MathUtils.clamp(x, 140, window.innerWidth - 140)}px`;
+      bubble.style.top = `${THREE.MathUtils.clamp(y, 110, window.innerHeight - 120)}px`;
+    }
+
+    // BET 36 Pop-Up Ad & Voiceover Playback
+    const BET36_SCRIPT =
+      "Feeling bored from work? It's time for a new adventure. Bet 36 has got you covered. VR table games, and live performances from your favored Vocaloid. You'll never get bored of Bet 36. Eligible only in Ontario. If you or someone you know has problems with gambling, tap your Mind Tree bar now.";
+    let bet36UploadedAudioUrl = null;
+    let bet36ProgressTimer = null;
+
+    function unlockSpeechEngine() {
+      if ('speechSynthesis' in window) {
+        try {
+          const u = new SpeechSynthesisUtterance('');
+          u.volume = 0;
+          window.speechSynthesis.speak(u);
+        } catch (e) {}
+      }
+    }
+
+    function revealBet36ExitButton() {
+      document.getElementById('btn-close-bet36-ad').classList.remove('hidden');
+      document.getElementById('bet36-audio-status').textContent = 'Voiceover complete';
+      document.getElementById('bet36-progress-bar').style.width = '100%';
+      document.getElementById('bet36-exit-hint').textContent = 'Tap ✕ in the top right to close this ad.';
+    }
+
+    function playBet36VoiceRecording() {
+      const audioEl = document.getElementById('bet36-voice-audio');
+      const statusEl = document.getElementById('bet36-audio-status');
+      const progressEl = document.getElementById('bet36-progress-bar');
+
+      clearInterval(bet36ProgressTimer);
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+      }
+      audioEl.pause();
+      progressEl.style.width = '0%';
+      statusEl.textContent = 'Playing voiceover…';
+
+      const sourceUrl = bet36UploadedAudioUrl || 'AdinMindTree_09.wav';
+      audioEl.src = sourceUrl;
+
+      const fallbackToSpokenVoice = () => {
+        if ('speechSynthesis' in window) {
+          const utter = new SpeechSynthesisUtterance(BET36_SCRIPT);
+          utter.rate = 1.02;
+          utter.pitch = 1.0;
+          const startTime = performance.now();
+          const estDurationMs = 15500;
+          bet36ProgressTimer = setInterval(() => {
+            const pct = Math.min(98, ((performance.now() - startTime) / estDurationMs) * 100);
+            progressEl.style.width = `${pct}%`;
+          }, 150);
+
+          utter.onend = () => {
+            clearInterval(bet36ProgressTimer);
+            revealBet36ExitButton();
+          };
+          utter.onerror = () => {
+            clearInterval(bet36ProgressTimer);
+            revealBet36ExitButton();
+          };
+          window.speechSynthesis.speak(utter);
+        } else {
+          setTimeout(revealBet36ExitButton, 2500);
+        }
+      };
+
+      audioEl.ontimeupdate = () => {
+        if (audioEl.duration > 0) {
+          progressEl.style.width = `${(audioEl.currentTime / audioEl.duration) * 100}%`;
+        }
+      };
+      audioEl.onended = () => revealBet36ExitButton();
+      audioEl.onerror = () => fallbackToSpokenVoice();
+
+      audioEl.play().catch(() => fallbackToSpokenVoice());
+    }
+
+    function showBet36AdPopup() {
+      document.getElementById('btn-close-bet36-ad').classList.add('hidden');
+      document.getElementById('bet36-ad-modal').classList.remove('hidden');
+      playBet36VoiceRecording();
+    }
+
+    function closeBet36AdPopup() {
+      clearInterval(bet36ProgressTimer);
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+      }
+      const audioEl = document.getElementById('bet36-voice-audio');
+      audioEl.pause();
+      document.getElementById('bet36-ad-modal').classList.add('hidden');
     }
 
     async function listenForWordsAndBloom() {
-      if (state.isListeningSpeech) return;
+      // If already recording, a second tap cleanly finishes & saves the current voice recording
+      if (state.isListeningSpeech) {
+        if (typeof state.activeStopSpeechFn === 'function') {
+          state.activeStopSpeechFn();
+        }
+        return;
+      }
+      // Prevent rapid double-click race conditions while microphone is initializing
+      if (state.isStartingSpeech) return;
+      state.isStartingSpeech = true;
+
       const micLabel = document.getElementById('label-mic');
       const micBtn = document.getElementById('btn-speak-flower');
       const waveCard = document.getElementById('voice-wave-card');
       const transcriptLabel = document.getElementById('voice-transcript-label');
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        state.isStartingSpeech = false;
         spawnFlowerOnTree('Mindful breath');
         return;
       }
@@ -2045,12 +1671,19 @@
       try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       } catch (err) {
+        state.isStartingSpeech = false;
         showToast('Microphone permission denied.');
         return;
       }
 
+      // Ensure mobile browsers don't pause the rear camera feed when activating the microphone
+      if (state.isCameraActive && videoEl && videoEl.paused) {
+        videoEl.play().catch(() => {});
+      }
+
+      state.isStartingSpeech = false;
       state.isListeningSpeech = true;
-      micLabel.textContent = 'Recording…';
+      micLabel.textContent = 'Recording… (Tap to Finish)';
       micBtn.classList.add('border-[#f5b7c8]');
       waveCard.classList.remove('hidden');
       transcriptLabel.textContent = 'Speak up to 10 words…';
@@ -2086,6 +1719,8 @@
         if (isFinished) return;
         isFinished = true;
         state.isListeningSpeech = false;
+        state.isStartingSpeech = false;
+        state.activeStopSpeechFn = null;
         micLabel.textContent = 'Speak (≤10 words)';
         micBtn.classList.remove('border-[#f5b7c8]');
 
@@ -2096,6 +1731,11 @@
         const finishAudioCleanup = () => {
           audioStream.getTracks().forEach((t) => t.stop());
           if (audioCtx) audioCtx.close().catch(() => {});
+
+          // Keep rear camera stream active on iOS/Android after mic release
+          if (state.isCameraActive && videoEl && videoEl.paused) {
+            videoEl.play().catch(() => {});
+          }
 
           state.waveformPeaks = livePeaks.length > 0 ? livePeaks.slice() : [0.2, 0.45, 0.3, 0.55, 0.25];
           drawVoiceWaveform(state.waveformPeaks, -1, false);
@@ -2136,6 +1776,8 @@
           finishAudioCleanup();
         }
       };
+
+      state.activeStopSpeechFn = finalizeRecording;
 
       // Optional parallel speech-to-text for 10-word cap & caption
       const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
