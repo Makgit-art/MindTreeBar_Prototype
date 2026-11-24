@@ -332,12 +332,19 @@
       </div>
 
       <!-- Transparent Serene Action Bar -->
-      <div class="interactive-ui nature-card p-2 rounded-full flex items-center gap-1.5 sm:gap-2">
+      <div class="interactive-ui nature-card p-2 rounded-full flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+        <button id="btn-speak-flower" class="px-4 py-2.5 rounded-full bg-transparent hover:bg-white/10 text-[#f5f3ee] border border-white/50 font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-[#f5b7c8]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+          <span id="label-mic">Speak (≤10 words)</span>
+        </button>
+
         <button id="btn-rescan" class="px-4 py-2.5 rounded-full bg-transparent hover:bg-white/10 text-[#f5f3ee] border border-white/40 font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          <span>Re-Scan Surface</span>
+          <span>Re-Scan</span>
         </button>
 
         <button id="btn-toggle-audio" class="px-3.5 py-2.5 rounded-full bg-transparent hover:bg-white/10 text-[#f5f3ee] border border-white/40 font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5" title="Toggle Therapeutic Breeze & Singing Bowl">
@@ -624,8 +631,13 @@
       baseGamma: null,
       deviceEuler: new THREE.Euler(0, 0, 0, 'YXZ'),
       sensorOffset: new THREE.Vector3(0, 0, 0),
+      opticalOffset: new THREE.Vector3(0, 0, 0),
       sensorVelocity: new THREE.Vector3(0, 0, 0),
       lastMotionTime: performance.now(),
+
+      // Voice-to-Flower state
+      isListeningSpeech: false,
+      flowerCount: 0,
 
       // Touch / Pointer interaction for rotating & scaling
       isDragging: false,
@@ -740,15 +752,19 @@
     const modelPivot = new THREE.Group();
     worldAnchorGroup.add(modelPivot);
 
+    // Container for spoken 3D flowers attached to the tree
+    const flowersGroup = new THREE.Group();
+    modelPivot.add(flowersGroup);
+
     let animatedParts = {
       canopy: null
     };
 
     /**
      * Direct Screen-to-3D Reticle Unprojection Tracker:
-     * Captures the reticle's exact 3D world position when locked, then keeps the
-     * tree stationary in world space while updating the 3D camera pose from
-     * device orientation and motion sensors as the user moves around it.
+     * Keeps the 3D tree completely still in world space while updating the 3D
+     * camera position (up/down & side-to-side) and orientation from optical flow
+     * and 6DoF IMU sensors.
      */
     class ReticleLockTracker {
       constructor(threeCamera) {
@@ -758,9 +774,10 @@
         this.tempDir = new THREE.Vector3();
         this.tempTarget = new THREE.Vector3();
         this.targetCamQuat = new THREE.Quaternion();
+        this.combinedCamPos = new THREE.Vector3();
       }
 
-      update(reticleNDC, apparentScale, isReticleVisible, isDemoMode, isTargetLocked, hasFixedWorldAnchor, sensorOffset, deviceEuler, hasGyro) {
+      update(reticleNDC, apparentScale, isReticleVisible, isDemoMode, isTargetLocked, hasFixedWorldAnchor, sensorOffset, opticalOffset, deviceEuler, hasGyro) {
         if (isDemoMode) {
           this.camera.position.set(0, 0.48, 0.68);
           this.camera.lookAt(0, 0.04, -0.55);
@@ -768,29 +785,28 @@
           return this.lockedWorldPos;
         }
 
-        // Update 3D Camera orientation & translation from 6DoF sensors so the camera moves
-        // through space while the anchored 3D tree remains stationary in the world
+        // Update 3D Camera orientation & up/down + side-to-side translation so the
+        // camera moves naturally through space while the 3D tree stays completely still
         if (hasGyro) {
           this.targetCamQuat.setFromEuler(deviceEuler);
-          this.camera.quaternion.slerp(this.targetCamQuat, 0.25);
+          this.camera.quaternion.slerp(this.targetCamQuat, 0.28);
         } else {
           this.camera.quaternion.identity();
         }
 
         if (isTargetLocked) {
-          this.camera.position.lerp(sensorOffset, 0.2);
+          this.combinedCamPos.copy(sensorOffset).add(opticalOffset);
+          this.camera.position.lerp(this.combinedCamPos, 0.25);
         } else {
           this.camera.position.set(0, 0, 0);
         }
         this.camera.updateMatrixWorld();
 
-        // Once the tree has spawned and anchored in world space, keep its position fixed
-        // so it does NOT follow the camera when the user moves or pans away
+        // Once spawned, the 3D tree's world position never changes until Re-Scan
         if (isTargetLocked && hasFixedWorldAnchor) {
           return this.lockedWorldPos;
         }
 
-        // Compute initial 3D world spawn position from the reticle's screen coordinates & scale
         const depth = THREE.MathUtils.clamp(0.85 / Math.max(0.35, apparentScale), 0.40, 1.85);
         const ndc = isReticleVisible ? reticleNDC : new THREE.Vector2(0, 0);
 
@@ -810,6 +826,77 @@
     }
 
     const reticleLockTracker = new ReticleLockTracker(camera);
+
+    /**
+     * Creates and blooms a 3D flower onto the canopy of the Mind Tree
+     */
+    function spawnFlowerOnTree(spokenWords = '') {
+      if (!state.isTargetLocked) {
+        autoSpawnMindTree('Mind Tree rooted on reticle');
+      }
+
+      const flowerGroup = new THREE.Group();
+      const palette = [0xf7a8b8, 0xffd1dc, 0xfff0f5, 0xfad2e1, 0xffb5a7, 0xffe5ec];
+      const petalColor = palette[state.flowerCount % palette.length];
+
+      const petalMat = new THREE.MeshStandardMaterial({
+        color: petalColor,
+        roughness: 0.4,
+        metalness: 0.05,
+        side: THREE.DoubleSide
+      });
+      const centerMat = new THREE.MeshStandardMaterial({
+        color: 0xf4c430,
+        roughness: 0.35,
+        emissive: 0x3a2a00,
+        emissiveIntensity: 0.25
+      });
+
+      // 6 sculpted petals arranged around a golden stamen center
+      const petalCount = 6;
+      for (let i = 0; i < petalCount; i++) {
+        const angle = (i / petalCount) * Math.PI * 2;
+        const petalGeo = new THREE.SphereGeometry(0.022, 10, 8);
+        petalGeo.scale(1.35, 0.35, 0.75);
+        const petal = new THREE.Mesh(petalGeo, petalMat);
+        petal.position.set(Math.cos(angle) * 0.022, 0.004, Math.sin(angle) * 0.022);
+        petal.rotation.y = -angle;
+        petal.rotation.z = 0.28;
+        petal.castShadow = true;
+        flowerGroup.add(petal);
+      }
+
+      const stamen = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 10), centerMat);
+      stamen.position.y = 0.008;
+      flowerGroup.add(stamen);
+
+      // Position flower around the upper canopy surface of the Mind Tree
+      const goldenAngle = state.flowerCount * 2.39996;
+      const canopyCenterY = 0.42 + ((state.flowerCount % 5) - 2) * 0.038;
+      const radius = 0.135 + (state.flowerCount % 3) * 0.018;
+
+      flowerGroup.position.set(
+        Math.cos(goldenAngle) * radius,
+        canopyCenterY,
+        Math.sin(goldenAngle) * radius
+      );
+
+      // Orient flower outward from the canopy center
+      flowerGroup.lookAt(
+        flowerGroup.position.x * 2,
+        flowerGroup.position.y + 0.08,
+        flowerGroup.position.z * 2
+      );
+      flowerGroup.rotateX(Math.PI / 2);
+
+      flowerGroup.userData.bloom = 0.02;
+      flowersGroup.add(flowerGroup);
+      state.flowerCount++;
+
+      soundscape.playBloomChime();
+      const previewText = spokenWords ? ` ("${spokenWords}")` : '';
+      showToast(`Flower #${state.flowerCount} bloomed on the tree${previewText}`);
+    }
 
     /**
      * Reconstructs the clean upright vertical Mind Tree (Trunk + Lush Canopy only)
@@ -940,18 +1027,74 @@
         modelPivot.remove(modelPivot.children[0]);
       }
       modelPivot.add(object3D);
+      modelPivot.add(flowersGroup);
     }
 
     setModelInPivot(buildDefaultMindTreeGLTFScene());
 
     /**
      * ============================================================================
-     * 5. REAL-TIME VERTICAL RETICLE SCANNER & ANTI-JITTER LOCAL TRACKER
+     * 5. REAL-TIME VERTICAL RETICLE SCANNER & CAMERA TRANSLATION TRACKER
      * ============================================================================
      */
     const videoEl = document.getElementById('camera-feed');
     const visionCanvas = document.getElementById('vision-canvas');
     const visionCtx = visionCanvas.getContext('2d', { willReadFrequently: true });
+    let prevGrayFrame = null;
+
+    /**
+     * Tracks up/down and side-to-side camera translation from visual optical flow
+     * so the anchored 3D tree stays completely still in world coordinates.
+     */
+    function updateVisualCameraTranslation(imgData, w, h) {
+      const d = imgData.data;
+      const currGray = new Float32Array(w * h);
+      for (let i = 0; i < currGray.length; i++) {
+        const px = i * 4;
+        currGray[i] = 0.299 * d[px] + 0.587 * d[px + 1] + 0.114 * d[px + 2];
+      }
+
+      if (prevGrayFrame && state.isTargetLocked) {
+        let bestDx = 0;
+        let bestDy = 0;
+        let minSad = Infinity;
+
+        // Block-match central background region across +/-8 pixels for lateral & vertical shift
+        for (let dy = -8; dy <= 8; dy += 2) {
+          for (let dx = -8; dx <= 8; dx += 2) {
+            let sad = 0;
+            let samples = 0;
+            for (let y = 28; y < h - 28; y += 6) {
+              for (let x = 28; x < w - 28; x += 6) {
+                const idx1 = y * w + x;
+                const idx2 = (y + dy) * w + (x + dx);
+                sad += Math.abs(prevGrayFrame[idx1] - currGray[idx2]);
+                samples++;
+              }
+            }
+            const avgSad = sad / samples;
+            if (avgSad < minSad) {
+              minSad = avgSad;
+              bestDx = dx;
+              bestDy = dy;
+            }
+          }
+        }
+
+        if (minSad < 28 && (Math.abs(bestDx) >= 2 || Math.abs(bestDy) >= 2)) {
+          // Camera moving right shifts image left (-bestDx); camera moving up shifts image down (+bestDy)
+          const stepRight = (-bestDx / w) * 1.15;
+          const stepUp = (bestDy / h) * 1.15;
+          const worldStep = new THREE.Vector3(stepRight, stepUp, 0).applyEuler(state.deviceEuler);
+          state.opticalOffset.add(worldStep);
+          state.opticalOffset.x = THREE.MathUtils.clamp(state.opticalOffset.x, -1.2, 1.2);
+          state.opticalOffset.y = THREE.MathUtils.clamp(state.opticalOffset.y, -1.0, 1.0);
+          state.opticalOffset.z = THREE.MathUtils.clamp(state.opticalOffset.z, -1.0, 1.0);
+        }
+      }
+
+      prevGrayFrame = currGray;
+    }
 
     const trackerMemory = {
       hasLock: false,
@@ -1141,6 +1284,9 @@
       visionCtx.drawImage(videoEl, 0, 0, vw, vh, 0, 0, 160, 160);
       const frame = visionCtx.getImageData(0, 0, 160, 160);
 
+      // Update camera up/down & side-to-side world position from optical flow
+      updateVisualCameraTranslation(frame, 160, 160);
+
       let score = 0;
       if (state.customTargetLoaded) {
         score = computeCustomImageMatch(frame);
@@ -1188,6 +1334,7 @@
       if (!wasAlreadyLocked) {
         state.bloomProgress = 0.04;
         state.sensorOffset.set(0, 0, 0);
+        state.opticalOffset.set(0, 0, 0);
         // Capture the exact 3D world position on the reticle at spawn time and lock it stationary
         state.hasFixedWorldAnchor = false;
         const spawnPos = reticleLockTracker.update(
@@ -1198,6 +1345,7 @@
           false,
           false,
           state.sensorOffset,
+          state.opticalOffset,
           state.deviceEuler,
           state.hasGyro
         );
@@ -1206,14 +1354,14 @@
         state.hasFixedWorldAnchor = true;
 
         soundscape.playBloomChime();
-        showToast('Mind Tree anchored in space — move camera freely around it.');
+        showToast('Mind Tree anchored in space — move camera up/down or side-to-side.');
       }
 
       document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#3b5243]';
       document.getElementById('status-title').textContent = reason;
       document.getElementById('status-subtitle').textContent = state.isDemoMode
         ? 'Standing upright on virtual Reticle V3 card'
-        : 'Stationary world anchor • Move camera around tree';
+        : 'Stationary world anchor • Speak up to 10 words to bloom';
       document.getElementById('reticle-box').classList.add('locked');
       const ghostEl = document.getElementById('ghost-reticle-guide');
       if (ghostEl) ghostEl.style.opacity = '0.0';
@@ -1231,12 +1379,20 @@
       state.bloomProgress = 0;
       state.baseAlpha = null;
       state.sensorOffset.set(0, 0, 0);
+      state.opticalOffset.set(0, 0, 0);
+      prevGrayFrame = null;
       trackerMemory.hasLock = false;
       trackerMemory.lastCx = 80;
       trackerMemory.lastCy = 80;
       trackerMemory.lastHalfBox = 44;
       demoReticleCardGroup.visible = false;
       reticleLockTracker.reset();
+
+      // Clear spoken flowers on full reset
+      while (flowersGroup.children.length > 0) {
+        flowersGroup.remove(flowersGroup.children[0]);
+      }
+      state.flowerCount = 0;
 
       if (state.isCameraActive) {
         worldAnchorGroup.visible = false;
@@ -1250,6 +1406,144 @@
       document.getElementById('reticle-container').style.opacity = '1';
       document.getElementById('reticle-hint').innerHTML = 'Hold <span class="text-[#a8c0ae] font-semibold">Reticle for Mind TreeV3</span> vertically — spawns vertically on reticle';
       showToast('Ready to scan — point at the vertical reticle.');
+    }
+
+    /**
+     * ============================================================================
+     * 5B. MOBILE MICROPHONE SPEECH RECOGNITION (UP TO 10 WORDS -> BLOOMS FLOWER)
+     * ============================================================================
+     */
+    async function listenForWordsAndBloom() {
+      if (state.isListeningSpeech) return;
+      const micLabel = document.getElementById('label-mic');
+      const micBtn = document.getElementById('btn-speak-flower');
+
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      // Primary path: Native Mobile Web Speech Recognition API
+      if (SpeechRec) {
+        try {
+          const recognition = new SpeechRec();
+          recognition.lang = 'en-US';
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+          recognition.continuous = false;
+
+          state.isListeningSpeech = true;
+          micLabel.textContent = 'Listening…';
+          micBtn.classList.add('border-[#f5b7c8]');
+          showToast('Speak up to 10 words into your microphone…');
+
+          let capturedWords = '';
+          let hasSpawned = false;
+
+          recognition.onresult = (event) => {
+            let transcript = '';
+            for (let i = 0; i < event.results.length; i++) {
+              transcript += event.results[i][0].transcript + ' ';
+            }
+            const words = transcript.trim().split(/\s+/).filter(Boolean);
+            const limitedWords = words.slice(0, 10);
+            capturedWords = limitedWords.join(' ');
+            micLabel.textContent = `${limitedWords.length}/10 words…`;
+
+            // Stop early once 10 words are spoken
+            if (words.length >= 10) {
+              recognition.stop();
+            }
+          };
+
+          recognition.onend = () => {
+            state.isListeningSpeech = false;
+            micLabel.textContent = 'Speak (≤10 words)';
+            micBtn.classList.remove('border-[#f5b7c8]');
+            if (!hasSpawned && capturedWords.length > 0) {
+              hasSpawned = true;
+              spawnFlowerOnTree(capturedWords);
+            } else if (!hasSpawned) {
+              showToast('No words heard — tap Speak and try again.');
+            }
+          };
+
+          recognition.onerror = () => {
+            state.isListeningSpeech = false;
+            micLabel.textContent = 'Speak (≤10 words)';
+            micBtn.classList.remove('border-[#f5b7c8]');
+            listenWithAudioEnvelopeFallback();
+          };
+
+          recognition.start();
+          return;
+        } catch (err) {
+          state.isListeningSpeech = false;
+        }
+      }
+
+      // Fallback path for mobile browsers without SpeechRecognition: live microphone voice detector
+      listenWithAudioEnvelopeFallback();
+    }
+
+    async function listenWithAudioEnvelopeFallback() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        spawnFlowerOnTree('Mindful breath');
+        return;
+      }
+
+      const micLabel = document.getElementById('label-mic');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        state.isListeningSpeech = true;
+        micLabel.textContent = 'Listening…';
+        showToast('Speak up to 10 words into your microphone…');
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let speechDetected = false;
+        let silenceFrames = 0;
+        const startTime = performance.now();
+
+        const checkVoice = () => {
+          analyser.getByteTimeDomainData(dataArray);
+          let peak = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const amp = Math.abs(dataArray[i] - 128);
+            if (amp > peak) peak = amp;
+          }
+
+          if (peak > 12) {
+            speechDetected = true;
+            silenceFrames = 0;
+          } else if (speechDetected) {
+            silenceFrames++;
+          }
+
+          const elapsed = performance.now() - startTime;
+          if ((speechDetected && silenceFrames > 28) || elapsed > 5500) {
+            stream.getTracks().forEach((t) => t.stop());
+            audioCtx.close();
+            state.isListeningSpeech = false;
+            micLabel.textContent = 'Speak (≤10 words)';
+            if (speechDetected) {
+              spawnFlowerOnTree('Spoken reflection');
+            } else {
+              showToast('No voice detected — tap Speak to bloom a flower.');
+            }
+            return;
+          }
+          requestAnimationFrame(checkVoice);
+        };
+        checkVoice();
+      } catch (err) {
+        state.isListeningSpeech = false;
+        micLabel.textContent = 'Speak (≤10 words)';
+        showToast('Microphone permission denied.');
+      }
     }
 
     let toastTimer = null;
@@ -1546,6 +1840,7 @@
     });
 
     document.getElementById('btn-rescan').addEventListener('click', resetAndRescanSurface);
+    document.getElementById('btn-speak-flower').addEventListener('click', listenForWordsAndBloom);
 
     document.getElementById('btn-toggle-audio').addEventListener('click', () => {
       const active = soundscape.toggle();
@@ -1601,8 +1896,7 @@
 
       // 1. Run real-time full-viewport reticle scanner
       processCameraVision(now);
-
-      // 2. Keep the 3D tree stationary at its world anchor while the camera moves in space
+      // 2. Keep the 3D tree stationary at its world anchor while the camera moves up/down & side-to-side
       const reticleWorldPos = reticleLockTracker.update(
         state.reticleNDC,
         state.reticleApparentScale,
@@ -1611,6 +1905,7 @@
         state.isTargetLocked,
         state.hasFixedWorldAnchor,
         state.sensorOffset,
+        state.opticalOffset,
         state.deviceEuler,
         state.hasGyro
       );
@@ -1626,7 +1921,7 @@
 
       modelPivot.scale.lerp(
         new THREE.Vector3(effectiveScale, effectiveScale, effectiveScale),
-        0.22
+        0.2
       );
       modelPivot.rotation.y = THREE.MathUtils.lerp(
         modelPivot.rotation.y,
@@ -1634,11 +1929,19 @@
         0.15
       );
 
-      // 4. Gentle therapeutic wind sway on canopy & reticle lock ring pulse
+      // 4. Gentle therapeutic wind sway on canopy, flowers & reticle lock ring pulse
       if (state.animateModel && worldAnchorGroup.visible) {
         if (animatedParts.canopy) {
           animatedParts.canopy.rotation.z = Math.sin(elapsed * 1.15) * 0.032;
         }
+        flowersGroup.children.forEach((flower, idx) => {
+          if (flower.userData.bloom < 1) {
+            flower.userData.bloom = Math.min(1, flower.userData.bloom + 0.04);
+          }
+          const s = 1 - Math.pow(1 - flower.userData.bloom, 3);
+          flower.scale.setScalar(Math.max(0.01, s));
+          flower.rotation.z = Math.sin(elapsed * 1.4 + idx) * 0.08;
+        });
         groundRingMat.opacity = 0.55 + Math.sin(elapsed * 2.0) * 0.2;
         const rippleScale = 1 + (Math.sin(elapsed * 1.6) * 0.5 + 0.5) * 0.14;
         outerRippleMesh.scale.set(rippleScale, 1, rippleScale);
