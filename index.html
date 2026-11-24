@@ -1,5 +1,14 @@
-<!-- ... existing code ... -->
-  <!-- Google Fonts: Plus Jakarta Sans, Lora & JetBrains Mono -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D Mind Tree — Therapeutic WebAR Sanctuary</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Lora, Plus Jakarta Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Lora:ital,wght@0,500;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -21,12 +30,12 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background-color: #1f2b24;
+      background-color: #24332a;
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       color: #f5f3ee;
     }
 
-    .font-serif-calm {
+    .font-lora {
       font-family: 'Lora', Georgia, serif;
     }
 
@@ -34,6 +43,7 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
+    /* Full-screen Rear Camera Feed */
     #camera-feed {
       position: fixed;
       inset: 0;
@@ -41,19 +51,21 @@
       height: 100%;
       object-fit: cover;
       z-index: 1;
-      background: #1f2b24;
+      background: #24332a;
     }
 
+    /* Serene Botanical Studio Backdrop for Interactive Demo Mode */
     #demo-backdrop {
       position: fixed;
       inset: 0;
       width: 100%;
       height: 100%;
       z-index: 1;
-      background: radial-gradient(circle at 50% 38%, #dce4da 0%, #b8c7b7 45%, #7c9a82 82%, #4a6352 100%);
+      background: radial-gradient(circle at 50% 36%, #f5f3ee 0%, #dce4dc 38%, #a8c0ae 72%, #5c7d65 100%);
       display: none;
     }
 
+    /* Transparent Three.js WebGL Layer */
     #ar-canvas {
       position: fixed;
       inset: 0;
@@ -64,6 +76,7 @@
       touch-action: none;
     }
 
+    /* Main HUD Layer */
     #hud-layer {
       position: fixed;
       inset: 0;
@@ -79,31 +92,31 @@
       pointer-events: auto;
     }
 
-    /* Therapeutic Nature Frosted Glass */
-    .nature-glass {
-      background: rgba(245, 243, 238, 0.80);
+    /* Therapeutic Nature Frosted Surfaces */
+    .nature-card {
+      background: rgba(245, 243, 238, 0.86);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(255, 255, 255, 0.65);
-      box-shadow: 0 12px 32px rgba(34, 48, 39, 0.16);
-      color: #2c3d32;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: 0 14px 36px rgba(36, 51, 42, 0.16);
+      color: #2b3d32;
     }
 
-    .nature-glass-dark {
-      background: rgba(43, 58, 48, 0.74);
+    .nature-pill-dark {
+      background: rgba(59, 82, 67, 0.80);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(216, 207, 194, 0.28);
-      box-shadow: 0 12px 32px rgba(24, 34, 28, 0.28);
+      border: 1px solid rgba(216, 207, 194, 0.35);
+      box-shadow: 0 10px 28px rgba(28, 40, 33, 0.24);
       color: #f5f3ee;
     }
 
-    /* Gentle Breathing Viewfinder Brackets */
+    /* Gentle Breathing Viewfinder Alignment Guide */
     .reticle-frame {
       position: relative;
       width: min(68vw, 268px);
       height: min(68vw, 268px);
-      animation: gentleBreathe 4.2s ease-in-out infinite;
+      animation: gentleBreathe 4.4s ease-in-out infinite;
       transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
     }
 
@@ -116,24 +129,24 @@
       position: absolute;
       width: 32px;
       height: 32px;
-      border-color: rgba(245, 243, 238, 0.92);
+      border-color: rgba(245, 243, 238, 0.94);
       border-style: solid;
-      transition: all 0.4s ease;
-      filter: drop-shadow(0 2px 6px rgba(43, 58, 48, 0.35));
+      transition: all 0.45s ease;
+      filter: drop-shadow(0 2px 6px rgba(36, 51, 42, 0.35));
     }
 
-    .reticle-corner.tl { top: 0; left: 0; border-width: 2.5px 0 0 2.5px; border-top-left-radius: 18px; }
-    .reticle-corner.tr { top: 0; right: 0; border-width: 2.5px 2.5px 0 0; border-top-right-radius: 18px; }
-    .reticle-corner.bl { bottom: 0; left: 0; border-width: 0 0 2.5px 2.5px; border-bottom-left-radius: 18px; }
-    .reticle-corner.br { bottom: 0; right: 0; border-width: 0 2.5px 2.5px 0; border-bottom-right-radius: 18px; }
+    .reticle-corner.tl { top: 0; left: 0; border-width: 2.5px 0 0 2.5px; border-top-left-radius: 20px; }
+    .reticle-corner.tr { top: 0; right: 0; border-width: 2.5px 2.5px 0 0; border-top-right-radius: 20px; }
+    .reticle-corner.bl { bottom: 0; left: 0; border-width: 0 0 2.5px 2.5px; border-bottom-left-radius: 20px; }
+    .reticle-corner.br { bottom: 0; right: 0; border-width: 0 2.5px 2.5px 0; border-bottom-right-radius: 20px; }
 
     .scan-wave {
       position: absolute;
-      left: 14px;
-      right: 14px;
+      left: 16px;
+      right: 16px;
       height: 2px;
-      background: linear-gradient(90deg, transparent, rgba(168, 192, 174, 0.95), #f5f3ee, rgba(168, 192, 174, 0.95), transparent);
-      box-shadow: 0 0 16px rgba(168, 192, 174, 0.75);
+      background: linear-gradient(90deg, transparent, #a8c0ae, #f5f3ee, #a8c0ae, transparent);
+      box-shadow: 0 0 14px rgba(168, 192, 174, 0.85);
       animation: sereneSweep 3.4s ease-in-out infinite;
     }
 
@@ -148,7 +161,7 @@
       height: 22px;
     }
 
-    /* Slide-up Drawer */
+    /* Slide-Up Space & Asset Drawer */
     #drawer-panel {
       transform: translateY(105%);
       transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
@@ -157,11 +170,12 @@
       transform: translateY(0);
     }
 
+    /* Custom Range Sliders */
     input[type="range"] {
       -webkit-appearance: none;
       appearance: none;
       height: 6px;
-      background: rgba(59, 82, 67, 0.18);
+      background: rgba(59, 82, 67, 0.2);
       border-radius: 999px;
       outline: none;
     }
@@ -171,145 +185,149 @@
       width: 18px;
       height: 18px;
       border-radius: 50%;
-      background: #5c7d65;
+      background: #3b5243;
       border: 2px solid #f5f3ee;
-      box-shadow: 0 2px 6px rgba(43, 58, 48, 0.25);
+      box-shadow: 0 2px 6px rgba(36, 51, 42, 0.25);
       cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <!-- Rear Camera Video Feed -->
-  <video id="camera-feed" playsinline muted autoplay></video>
+  <!-- 1. Full-Screen Rear Camera Video Feed -->
+  <video id="camera-feed" autoplay playsinline muted></video>
 
-  <!-- Soft Nature Studio Backdrop (when camera unavailable or in Sanctuary Preview Mode) -->
+  <!-- Soft Nature Backdrop (Active in Interactive Demo Mode) -->
   <div id="demo-backdrop"></div>
 
   <!-- Offscreen Vision & Reticle Centroid Analysis Canvas -->
   <canvas id="vision-canvas" width="160" height="160" class="hidden"></canvas>
 
-  <!-- Main WebGL Three.js AR Canvas -->
+  <!-- Transparent Three.js WebGL Canvas -->
   <canvas id="ar-canvas"></canvas>
 
-  <!-- Therapeutic Welcome & Camera Permission Splash Screen -->
-  <div id="permission-modal" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-[#223027]/65 backdrop-blur-md">
-    <div class="nature-glass w-full max-w-md rounded-[32px] p-6 sm:p-8 text-center">
-      <!-- Live Generated Reticle V3 Preview Badge -->
-      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-white p-2 border border-[#7c9a82]/40 shadow-sm flex items-center justify-center">
+  <!-- Immediate Camera & Motion Sensor Permission Splash Overlay -->
+  <div id="permission-modal" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-[#24332a]/70 backdrop-blur-md">
+    <div class="nature-card w-full max-w-md rounded-[32px] p-6 sm:p-8 text-center">
+      <!-- Generated Reticle for Mind TreeV3.png Badge -->
+      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-white p-2 border border-[#d8cfc2] shadow-sm flex items-center justify-center">
         <img id="splash-reticle-img" alt="Reticle for Mind TreeV3.png" class="w-full h-full object-contain rounded-lg" />
       </div>
 
-      <span class="inline-block px-3.5 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-[#7c9a82]/15 text-[#3b5243] border border-[#7c9a82]/30 mb-2.5">
-        Mindful Spatial Sanctuary
+      <span class="inline-block px-3.5 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-[#7c9a82]/20 text-[#3b5243] border border-[#7c9a82]/35 mb-2.5">
+        Therapeutic Spatial Sanctuary
       </span>
-      <h1 class="font-serif-calm text-2xl sm:text-3xl font-semibold tracking-tight text-[#27382d] mb-2">
+
+      <h1 class="font-lora text-2xl sm:text-3xl font-semibold tracking-tight text-[#26382d] mb-2">
         3D Mind Tree AR
       </h1>
-      <p class="text-sm text-[#4a5e51] leading-relaxed mb-5">
-        Gently frame <span class="text-[#2f4b39] font-semibold">Reticle for Mind TreeV3.png</span> with your camera. The Mind Tree will automatically take root on your surface with no tap required.
+
+      <p class="text-sm text-[#495e51] leading-relaxed mb-5">
+        Allow camera and motion sensor access to place the <span class="text-[#3b5243] font-semibold">3D Mind Tree</span> into your physical space. Simply frame <span class="text-[#3b5243] font-semibold">Reticle for Mind TreeV3.png</span>—it will take root automatically.
       </p>
 
-      <div class="space-y-2.5 text-left bg-[#ebe7de]/80 rounded-2xl p-4 mb-6 border border-[#d8cfc2] text-xs text-[#3f5246]">
+      <div class="space-y-2.5 text-left bg-[#ebe7de]/85 rounded-2xl p-4 mb-6 border border-[#d8cfc2] text-xs text-[#3b5243]">
         <div class="flex items-center gap-2.5">
-          <span class="w-2 h-2 rounded-full bg-[#5c7d65] shrink-0"></span>
-          <span><strong>Hands-Free Spawning:</strong> Automatically blooms upon scanning the reticle</span>
+          <span class="w-2 h-2 rounded-full bg-[#3b5243] shrink-0"></span>
+          <span><strong>Rear Camera &amp; 6DoF Sensors:</strong> Real-world surface alignment &amp; motion tracking</span>
         </div>
         <div class="flex items-center gap-2.5">
           <span class="w-2 h-2 rounded-full bg-[#7c9a82] shrink-0"></span>
-          <span><strong>Surface Raycast Anchor:</strong> Stays grounded to your real-world table or floor</span>
+          <span><strong>Hands-Free Auto-Spawn:</strong> Blooms automatically when the reticle is scanned</span>
         </div>
         <div class="flex items-center gap-2.5">
-          <span class="w-2 h-2 rounded-full bg-[#a68a64] shrink-0"></span>
-          <span><strong>6DoF Motion &amp; Ambience:</strong> Walk around the tree in calm spatial harmony</span>
+          <span class="w-2 h-2 rounded-full bg-[#a8c0ae] shrink-0"></span>
+          <span><strong>Surface Raycast Anchor:</strong> Rooted to your table or floor as you move</span>
         </div>
       </div>
 
       <div class="flex flex-col sm:flex-row gap-2.5">
-        <button id="btn-start-ar" class="flex-1 py-3.5 px-5 rounded-2xl bg-[#4c6b56] hover:bg-[#3f5a48] text-[#f5f3ee] font-semibold text-sm shadow-md shadow-[#2b3a30]/20 transition active:scale-[0.98]">
-          Enter Camera Sanctuary
+        <button id="btn-start-ar" class="flex-1 py-3.5 px-5 rounded-2xl bg-[#3b5243] hover:bg-[#2f4236] text-[#f5f3ee] font-semibold text-sm shadow-md shadow-[#24332a]/20 transition active:scale-[0.98]">
+          Enable Camera &amp; Sensors
         </button>
-        <button id="btn-demo-mode" class="py-3.5 px-4 rounded-2xl bg-[#e6e1d6] hover:bg-[#dcd5c7] text-[#33463a] font-semibold text-sm border border-[#cfc6b7] transition active:scale-[0.98]">
-          Garden Preview
+        <button id="btn-demo-mode" class="py-3.5 px-4 rounded-2xl bg-[#e6e1d6] hover:bg-[#d8cfc2] text-[#3b5243] font-semibold text-sm border border-[#d8cfc2] transition active:scale-[0.98]">
+          Interactive Demo Mode
         </button>
       </div>
-      <p id="permission-error" class="hidden mt-3 text-xs text-[#8c4338] bg-[#f5e4e1] border border-[#dcb4ad] rounded-xl p-2.5"></p>
+
+      <p id="permission-error" class="hidden mt-3 text-xs text-[#7c3a32] bg-[#f4e4e1] border border-[#d8b4ae] rounded-xl p-2.5"></p>
     </div>
   </div>
 
-  <!-- Target Marker Reference & Download Modal -->
-  <div id="marker-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#223027]/65 backdrop-blur-md">
-    <div class="nature-glass w-full max-w-sm rounded-[32px] p-6 text-center">
+  <!-- Reticle Marker Reference & One-Tap Download Modal -->
+  <div id="marker-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#24332a]/70 backdrop-blur-md">
+    <div class="nature-card w-full max-w-sm rounded-[32px] p-6 text-center">
       <div class="flex items-center justify-between mb-3">
-        <span class="text-xs font-semibold uppercase tracking-wider text-[#4c6b56]">Mind Tree Target Marker</span>
-        <button id="btn-close-marker" class="px-3 py-1.5 rounded-xl bg-[#e6e1d6] hover:bg-[#dcd5c7] text-[#33463a] text-xs font-semibold">
+        <span class="text-xs font-semibold uppercase tracking-wider text-[#3b5243]">Target Fiducial Marker</span>
+        <button id="btn-close-marker" class="px-3 py-1.5 rounded-xl bg-[#e6e1d6] hover:bg-[#d8cfc2] text-[#3b5243] text-xs font-semibold">
           Close
         </button>
       </div>
-      <p class="text-xs text-[#4a5e51] mb-3 leading-relaxed">
-        Point your camera at <strong class="text-[#27382d]">Reticle for Mind TreeV3.png</strong> on a screen or printed card to automatically root the 3D tree.
+
+      <p class="text-xs text-[#495e51] mb-3 leading-relaxed">
+        Display or print <strong class="text-[#26382d]">Reticle for Mind TreeV3.png</strong> and hold it inside the viewfinder to automatically spawn the 3D tree.
       </p>
 
       <div class="bg-white p-4 rounded-2xl shadow-inner border border-[#d8cfc2] mx-auto w-56 h-56 flex items-center justify-center mb-3">
         <img id="modal-reticle-img" alt="Reticle for Mind TreeV3.png" class="w-full h-full object-contain" />
       </div>
-      <p id="marker-filename-label" class="font-mono-tech text-[11px] text-[#66786c] mb-4">Reticle for Mind TreeV3.png</p>
+      <p id="marker-filename-label" class="font-mono-tech text-[11px] text-[#5c7d65] mb-4">Reticle for Mind TreeV3.png</p>
 
       <div class="flex gap-2">
-        <button id="btn-download-marker" class="flex-1 py-3 px-4 rounded-2xl bg-[#4c6b56] hover:bg-[#3f5a48] text-[#f5f3ee] font-semibold text-xs transition active:scale-[0.98]">
-          Download Reticle V3
+        <button id="btn-download-marker" class="flex-1 py-3 px-4 rounded-2xl bg-[#3b5243] hover:bg-[#2f4236] text-[#f5f3ee] font-semibold text-xs transition active:scale-[0.98]">
+          Download PNG
         </button>
-        <button id="btn-simulate-lock" class="py-3 px-4 rounded-2xl bg-[#e6e1d6] hover:bg-[#dcd5c7] text-[#33463a] font-semibold text-xs border border-[#cfc6b7] transition active:scale-[0.98]">
-          Preview Bloom
+        <button id="btn-simulate-lock" class="py-3 px-4 rounded-2xl bg-[#e6e1d6] hover:bg-[#d8cfc2] text-[#3b5243] font-semibold text-xs border border-[#d8cfc2] transition active:scale-[0.98]">
+          Spawn Now
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Main Therapeutic AR HUD Overlay -->
+  <!-- Main Therapeutic AR HUD -->
   <div id="hud-layer">
-    <!-- Top Bar: Serene Status Pill + Raycast X/Y/Z Spatial Telemetry -->
+    <!-- Top Row: Tracking Status Pill, Reticle Preview Button & Live X/Y/Z Telemetry -->
     <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
       <div class="flex items-center justify-between gap-2">
-        <!-- Tracking State Pill -->
-        <div class="interactive-ui nature-glass px-4 py-2.5 rounded-full flex items-center gap-3">
-          <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-[#a68a64] animate-pulse"></span>
+        <!-- Status Pill -->
+        <div class="interactive-ui nature-card px-4 py-2.5 rounded-full flex items-center gap-3">
+          <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-[#7c9a82] animate-pulse"></span>
           <div>
-            <div id="status-title" class="text-xs font-semibold text-[#27382d] leading-tight">Gently scanning for reticle…</div>
-            <div id="status-subtitle" class="text-[10px] text-[#55695c] leading-tight">Tree blooms automatically upon alignment</div>
+            <div id="status-title" class="text-xs font-semibold text-[#26382d] leading-tight">Scanning for reticle…</div>
+            <div id="status-subtitle" class="text-[10px] text-[#55695c] leading-tight">Auto-spawns tree when marker is aligned</div>
           </div>
         </div>
 
-        <!-- Target Reference Button -->
-        <button id="btn-open-marker" class="interactive-ui nature-glass px-3.5 py-2.5 rounded-full flex items-center gap-2 text-xs font-semibold text-[#3b5243] hover:bg-[#f5f3ee] transition active:scale-95">
-          <img id="hud-mini-reticle" alt="Target" class="w-5 h-5 rounded-md bg-white p-0.5 object-contain border border-[#d8cfc2]" />
-          <span>Reticle</span>
+        <!-- HUD Mini-Preview & Reticle Modal Trigger -->
+        <button id="btn-open-marker" class="interactive-ui nature-card px-3.5 py-2.5 rounded-full flex items-center gap-2 text-xs font-semibold text-[#3b5243] hover:bg-[#f5f3ee] transition active:scale-95">
+          <img id="hud-mini-reticle" alt="Reticle Preview" class="w-5 h-5 rounded-md bg-white p-0.5 object-contain border border-[#d8cfc2]" />
+          <span>Reticle V3</span>
         </button>
       </div>
 
-      <!-- Raycast Surface Hit X/Y/Z Telemetry Pill -->
-      <div class="interactive-ui nature-glass-dark px-4 py-2 rounded-full flex items-center justify-between sm:justify-end gap-3 font-mono-tech text-[11px]">
+      <!-- Live Spatial X / Y / Z Telemetry Pill -->
+      <div class="interactive-ui nature-pill-dark px-4 py-2 rounded-full flex items-center justify-between sm:justify-end gap-3 font-mono-tech text-[11px]">
         <div class="flex items-center gap-1">
           <span class="text-[#d8cfc2] font-semibold">X</span>
           <span id="telemetry-x" class="text-[#f5f3ee]">0.00m</span>
         </div>
         <div class="flex items-center gap-1">
           <span class="text-[#a8c0ae] font-semibold">Y</span>
-          <span id="telemetry-y" class="text-[#f5f3ee]">-0.18m</span>
+          <span id="telemetry-y" class="text-[#f5f3ee]">-0.22m</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class="text-[#c5d6c8] font-semibold">Z</span>
+          <span class="text-[#d8cfc2] font-semibold">Z</span>
           <span id="telemetry-z" class="text-[#f5f3ee]">-0.75m</span>
         </div>
-        <div class="h-3.5 w-[1px] bg-white/20"></div>
-        <div class="flex items-center gap-1 text-[#d8cfc2]">
-          <span>SYNC</span>
+        <div class="h-3.5 w-[1px] bg-white/25"></div>
+        <div class="flex items-center gap-1 text-[#a8c0ae]">
+          <span>LOCK</span>
           <span id="telemetry-score">0%</span>
         </div>
       </div>
     </div>
 
-    <!-- Center Serene Breathing Reticle Overlay -->
+    <!-- Center Gentle Breathing Viewfinder Alignment Guide -->
     <div id="reticle-container" class="flex flex-col items-center justify-center my-auto transition-opacity duration-500">
       <div id="reticle-box" class="reticle-frame flex items-center justify-center">
         <div class="reticle-corner tl"></div>
@@ -319,93 +337,92 @@
         <div id="scan-wave" class="scan-wave"></div>
 
         <!-- Soft Ghost Guide Overlay of Reticle for Mind TreeV3 -->
-        <img id="ghost-reticle-guide" alt="Reticle Guide" class="w-36 h-36 opacity-25 rounded-xl pointer-events-none transition-opacity duration-500" />
+        <img id="ghost-reticle-guide" alt="Reticle Alignment Guide" class="w-36 h-36 opacity-25 rounded-xl pointer-events-none transition-opacity duration-500" />
       </div>
-      <div id="reticle-hint" class="mt-3.5 px-4 py-1.5 rounded-full nature-glass-dark text-[11px] font-medium text-[#f5f3ee]">
-        Align <span class="text-[#c5d6c8] font-semibold">Reticle for Mind TreeV3</span> — spawns automatically
+      <div id="reticle-hint" class="mt-3.5 px-4 py-1.5 rounded-full nature-pill-dark text-[11px] font-medium text-[#f5f3ee]">
+        Frame <span class="text-[#a8c0ae] font-semibold">Reticle for Mind TreeV3</span> — spawns automatically
       </div>
     </div>
 
     <!-- Bottom Controls & Gentle Toast -->
     <div class="flex flex-col items-center gap-2.5">
-      <!-- Non-intrusive Serene Toast Banner -->
-      <div id="toast-banner" class="hidden nature-glass px-4 py-2 rounded-full text-xs font-medium text-[#27382d]">
+      <div id="toast-banner" class="hidden nature-card px-4 py-2 rounded-full text-xs font-medium text-[#26382d]">
         Mind Tree rooted on surface.
       </div>
 
-      <!-- Minimalist Therapeutic Action Bar (No manual tap-to-spawn required) -->
-      <div class="interactive-ui nature-glass p-2 rounded-full flex items-center gap-1.5 sm:gap-2">
-        <button id="btn-rescan" class="px-4 py-2.5 rounded-full bg-[#4c6b56] hover:bg-[#3f5a48] text-[#f5f3ee] font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5">
+      <!-- Serene Action Bar -->
+      <div class="interactive-ui nature-card p-2 rounded-full flex items-center gap-1.5 sm:gap-2">
+        <button id="btn-rescan" class="px-4 py-2.5 rounded-full bg-[#3b5243] hover:bg-[#2f4236] text-[#f5f3ee] font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <span>Re-Scan Surface</span>
         </button>
 
-        <button id="btn-toggle-audio" class="px-3.5 py-2.5 rounded-full bg-[#e6e1d6] hover:bg-[#dcd5c7] text-[#33463a] font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5" title="Toggle Ambient Nature Soundscape">
+        <button id="btn-toggle-audio" class="px-3.5 py-2.5 rounded-full bg-[#e6e1d6] hover:bg-[#d8cfc2] text-[#3b5243] font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5" title="Toggle Therapeutic Breeze & Singing Bowl">
           <svg id="icon-audio-off" class="w-4 h-4 text-[#5c7d65]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
-          <svg id="icon-audio-on" class="hidden w-4 h-4 text-[#4c6b56]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg id="icon-audio-on" class="hidden w-4 h-4 text-[#3b5243]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
           </svg>
           <span id="label-audio">Sound Off</span>
         </button>
 
-        <button id="btn-toggle-drawer" class="px-3.5 py-2.5 rounded-full bg-[#e6e1d6] hover:bg-[#dcd5c7] text-[#33463a] font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5">
-          <svg class="w-4 h-4 text-[#4c6b56]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <button id="btn-toggle-drawer" class="px-3.5 py-2.5 rounded-full bg-[#e6e1d6] hover:bg-[#d8cfc2] text-[#3b5243] font-semibold text-xs sm:text-sm transition active:scale-95 flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-[#3b5243]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
           </svg>
-          <span>Space</span>
+          <span>Sanctuary</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Slide-Up Nature Asset & Raycast Calibration Drawer -->
+  <!-- Slide-Up Sanctuary Assets & Raycast Settings Drawer -->
   <div id="drawer-panel" class="fixed inset-x-0 bottom-0 z-30 p-3 sm:p-4 flex justify-center pointer-events-none">
-    <div class="interactive-ui nature-glass w-full max-w-lg rounded-[32px] p-5 sm:p-6 max-h-[82vh] overflow-y-auto">
+    <div class="interactive-ui nature-card w-full max-w-lg rounded-[32px] p-5 sm:p-6 max-h-[82vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3 mb-4 border-b border-[#d8cfc2]">
         <div>
-          <h2 class="font-serif-calm text-base font-semibold text-[#27382d]">Sanctuary Space &amp; Raycast Settings</h2>
-          <p class="text-[11px] text-[#55695c]">Surface Raycast Anchor • 5-Node Mind Tree Scene</p>
+          <h2 class="font-lora text-base font-semibold text-[#26382d]">Sanctuary Assets &amp; Raycast Settings</h2>
+          <p class="text-[11px] text-[#55695c]">Khronos glTF Blender I/O v4.5.48 • 5-Node Mind Tree</p>
         </div>
-        <button id="btn-close-drawer" class="px-3.5 py-1.5 rounded-full bg-[#4c6b56] text-[#f5f3ee] text-xs font-semibold">
+        <button id="btn-close-drawer" class="px-3.5 py-1.5 rounded-full bg-[#3b5243] text-[#f5f3ee] text-xs font-semibold">
           Done
         </button>
       </div>
 
-      <!-- Loaded Asset Status Cards -->
+      <!-- Custom Model & Target Marker Uploaders -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
         <div class="bg-[#ebe7de]/90 rounded-2xl p-3.5 border border-[#d8cfc2]">
-          <div class="text-[10px] uppercase tracking-wider text-[#4c6b56] font-semibold mb-1">Active Reticle Marker</div>
-          <div id="active-target-name" class="text-xs font-bold text-[#27382d] truncate">Reticle for Mind TreeV3.png</div>
-          <label class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f5f3ee] hover:bg-white text-[11px] font-semibold text-[#33463a] border border-[#cfc6b7] cursor-pointer transition">
-            <span>Upload Custom Reticle</span>
+          <div class="text-[10px] uppercase tracking-wider text-[#3b5243] font-semibold mb-1">Target Reticle Image</div>
+          <div id="active-target-name" class="text-xs font-bold text-[#26382d] truncate">Reticle for Mind TreeV3.png</div>
+          <label class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f5f3ee] hover:bg-white text-[11px] font-semibold text-[#3b5243] border border-[#d8cfc2] cursor-pointer transition">
+            <span>Upload Target Image</span>
             <input id="input-target-image" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
           </label>
         </div>
 
         <div class="bg-[#ebe7de]/90 rounded-2xl p-3.5 border border-[#d8cfc2]">
-          <div class="text-[10px] uppercase tracking-wider text-[#4c6b56] font-semibold mb-1">Active 3D Model (.glb)</div>
-          <div id="active-model-name" class="text-xs font-bold text-[#27382d] truncate">MindTree_Blender_v4.5.48 (5 Nodes)</div>
-          <label class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f5f3ee] hover:bg-white text-[11px] font-semibold text-[#33463a] border border-[#cfc6b7] cursor-pointer transition">
-            <span>Load .GLB / .GLTF</span>
+          <div class="text-[10px] uppercase tracking-wider text-[#3b5243] font-semibold mb-1">3D glTF Model (.glb)</div>
+          <div id="active-model-name" class="text-xs font-bold text-[#26382d] truncate">MindTree_Blender_v4.5.48 (5 Nodes)</div>
+          <label class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f5f3ee] hover:bg-white text-[11px] font-semibold text-[#3b5243] border border-[#d8cfc2] cursor-pointer transition">
+            <span>Upload .GLB / .GLTF</span>
             <input id="input-glb-model" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" class="hidden" />
           </label>
         </div>
       </div>
 
-      <!-- 5-Node Scene Hierarchy Inspector -->
+      <!-- 5-Node Blender Scene Hierarchy -->
       <div class="bg-[#ebe7de]/75 rounded-2xl p-3.5 border border-[#d8cfc2] mb-4">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-[11px] font-semibold text-[#33463a]">Mind Tree Scene Nodes</span>
-          <button id="btn-restore-default-tree" class="text-[11px] text-[#4c6b56] hover:underline font-semibold">
+          <span class="text-[11px] font-semibold text-[#3b5243]">Reconstructed 5-Node Mind Tree Hierarchy</span>
+          <button id="btn-restore-default-tree" class="text-[11px] text-[#5c7d65] hover:underline font-semibold">
             Restore Default
           </button>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px] font-mono-tech text-[#33463a]">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px] font-mono-tech text-[#3b5243]">
           <div class="px-2 py-1.5 rounded-lg bg-[#f5f3ee] border border-[#d8cfc2] flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full" style="background:#80a6cc"></span>
             <span class="truncate">0: Cube (Crystal)</span>
@@ -423,18 +440,18 @@
             <span class="truncate">3: Cube.001 Spire</span>
           </div>
           <div class="px-2 py-1.5 rounded-lg bg-[#f5f3ee] border border-[#d8cfc2] flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-[#27382d]"></span>
-            <span class="truncate">4: Plane.002 Base</span>
+            <span class="w-2 h-2 rounded-full bg-[#26382d]"></span>
+            <span class="truncate">4: Plane.002 Anchor</span>
           </div>
         </div>
       </div>
 
-      <!-- Transform & Sensitivity Sliders -->
-      <div class="space-y-3 text-xs text-[#33463a]">
+      <!-- Sliders & Animation Controls -->
+      <div class="space-y-3 text-xs text-[#3b5243]">
         <div>
           <div class="flex justify-between mb-1">
-            <span class="font-medium">Tree Scale</span>
-            <span id="val-scale" class="font-mono-tech text-[#4c6b56] font-semibold">1.00x</span>
+            <span class="font-medium">Mind Tree Scale</span>
+            <span id="val-scale" class="font-mono-tech text-[#3b5243] font-semibold">1.00x</span>
           </div>
           <input id="slider-scale" type="range" min="0.35" max="2.5" step="0.05" value="1.0" class="w-full" />
         </div>
@@ -442,14 +459,14 @@
         <div>
           <div class="flex justify-between mb-1">
             <span class="font-medium">Auto-Spawn Lock Sensitivity</span>
-            <span id="val-threshold" class="font-mono-tech text-[#4c6b56] font-semibold">64%</span>
+            <span id="val-threshold" class="font-mono-tech text-[#3b5243] font-semibold">64%</span>
           </div>
           <input id="slider-threshold" type="range" min="45" max="90" step="1" value="64" class="w-full" />
         </div>
 
         <div class="flex items-center justify-between pt-1">
-          <span class="font-medium">Gentle Breeze Canopy Sway</span>
-          <input id="toggle-anim" type="checkbox" checked class="w-4 h-4 accent-[#4c6b56] rounded" />
+          <span class="font-medium">Gentle Wind Sway &amp; Spire Levitation</span>
+          <input id="toggle-anim" type="checkbox" checked class="w-4 h-4 accent-[#3b5243] rounded" />
         </div>
       </div>
     </div>
@@ -467,6 +484,7 @@
       canvas.height = size;
       const ctx = canvas.getContext('2d');
 
+      // Pure white fiducial background
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, size, size);
 
@@ -479,9 +497,11 @@
         ctx.strokeRect(offset, offset, boxSize, boxSize);
       }
 
+      // Outer concentric black square border + inner concentric black square border
       strokeCenteredSquare(0.765, 0.058);
       strokeCenteredSquare(0.51, 0.055);
 
+      // Central horizontal black oval dot
       ctx.fillStyle = '#000000';
       ctx.beginPath();
       ctx.ellipse(size * 0.5, size * 0.5, size * 0.068, size * 0.044, 0, 0, Math.PI * 2);
@@ -500,7 +520,7 @@
 
     /**
      * ============================================================================
-     * 2. THERAPEUTIC AMBIENT WEB AUDIO SOUNDSCAPE (SOFT WIND & SINGING BOWL)
+     * 2. THERAPEUTIC WEB AUDIO API SOUNDSCAPE (SOFT WIND & SINGING BOWL CHIME)
      * ============================================================================
      */
     class TherapeuticSoundscape {
@@ -518,7 +538,7 @@
           this.masterGain = this.ctx.createGain();
           this.masterGain.gain.value = 0.0;
           this.masterGain.connect(this.ctx.destination);
-          this._buildGraph();
+          this._buildAmbientNodes();
         }
 
         if (this.ctx.state === 'suspended') {
@@ -535,24 +555,24 @@
       playBloomChime() {
         if (!this.ctx || !this.isPlaying) return;
         const now = this.ctx.currentTime;
-        // Soft pentatonic harmonic chime (D4, A4, E5)
+        // Soft pentatonic singing-bowl harmonics (D4, A4, E5)
         [293.66, 440.0, 659.25].forEach((freq, idx) => {
           const osc = this.ctx.createOscillator();
           const gain = this.ctx.createGain();
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
-          gain.gain.setValueAtTime(0.0001, now + idx * 0.12);
-          gain.gain.exponentialRampToValueAtTime(0.18 / (idx + 1), now + idx * 0.12 + 0.18);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.12 + 2.8);
+          osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+          gain.gain.setValueAtTime(0.0001, now + idx * 0.14);
+          gain.gain.exponentialRampToValueAtTime(0.18 / (idx + 1), now + idx * 0.14 + 0.18);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.14 + 2.9);
           osc.connect(gain);
           gain.connect(this.masterGain);
-          osc.start(now + idx * 0.12);
-          osc.stop(now + idx * 0.12 + 3.0);
+          osc.start(now + idx * 0.14);
+          osc.stop(now + idx * 0.14 + 3.1);
         });
       }
 
-      _buildGraph() {
-        // Gentle filtered pink-noise breeze
+      _buildAmbientNodes() {
+        // Soft low-pass filtered pink noise breeze
         const bufferSize = this.ctx.sampleRate * 3;
         const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
@@ -569,19 +589,19 @@
           b6 = white * 0.115926;
         }
 
-        const whiteNoise = this.ctx.createBufferSource();
-        whiteNoise.buffer = noiseBuffer;
-        whiteNoise.loop = true;
+        const breezeSource = this.ctx.createBufferSource();
+        breezeSource.buffer = noiseBuffer;
+        breezeSource.loop = true;
 
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.value = 340;
 
-        whiteNoise.connect(filter);
+        breezeSource.connect(filter);
         filter.connect(this.masterGain);
-        whiteNoise.start(0);
+        breezeSource.start(0);
 
-        // Warm low drone harmonic (146.83 Hz D3)
+        // Warm D3 harmonic drone
         const drone = this.ctx.createOscillator();
         const droneGain = this.ctx.createGain();
         drone.type = 'sine';
@@ -597,7 +617,7 @@
 
     /**
      * ============================================================================
-     * 3. APPLICATION STATE & SPATIAL 6DoF TRACKING STATE
+     * 3. APPLICATION STATE & 6DoF SPATIAL TRACKING STATE
      * ============================================================================
      */
     const state = {
@@ -611,22 +631,21 @@
       customTargetLoaded: false,
       customTargetSignature: null,
 
-      // Optical reticle centroid (Normalized Device Coordinates -1..1) & apparent scale
+      // Optical reticle normalized screen centroid (NDC -1..1) & apparent scale
       reticleNDC: new THREE.Vector2(0, -0.05),
       reticleApparentScale: 1.0,
       reticleVisibleInFrame: false,
 
-      // Organic bloom animation progress (0 = seed, 1 = full tree)
+      // Organic bloom growth progress (0 -> 1)
       bloomProgress: 0,
 
-      // World-locked 6DoF anchor position & transform
-      anchorPos: new THREE.Vector3(0, -0.18, -0.75),
-      targetAnchorPos: new THREE.Vector3(0, -0.18, -0.75),
+      // World-locked 6DoF anchor position & user transform
+      anchorPos: new THREE.Vector3(0, -0.22, -0.75),
       userScale: 1.0,
       userRotationY: 0.25,
       animateModel: true,
 
-      // Device Orientation & Motion (6DoF sensor fusion)
+      // Mobile 6DoF DeviceOrientation & DeviceMotion fusion
       hasGyro: false,
       baseAlpha: null,
       baseBeta: null,
@@ -636,17 +655,16 @@
       sensorVelocity: new THREE.Vector3(0, 0, 0),
       lastMotionTime: performance.now(),
 
-      // Touch / Pointer interaction (for rotating/scaling only — spawning is automatic)
+      // Touch / Pointer interaction for rotating and pinch-scaling
       isDragging: false,
       lastPointerX: 0,
-      lastPointerY: 0,
       initialPinchDist: null,
       initialPinchScale: 1.0
     };
 
     /**
      * ============================================================================
-     * 4. THREE.JS PBR SCENE & EXACT 5-NODE GLTF MIND TREE RECONSTRUCTION
+     * 4. THREE.JS PBR SCENE & 5-NODE KHRONOS GLTF MIND TREE RECONSTRUCTION
      * ============================================================================
      */
     const arCanvas = document.getElementById('ar-canvas');
@@ -674,8 +692,8 @@
     );
     camera.position.set(0, 0.14, 0.35);
 
-    // Warm Natural Sunlight + Soft Botanical Hemisphere Rig
-    const hemiLight = new THREE.HemisphereLight(0xf5f3ee, 0x3b5243, 1.1);
+    // Warm Daylight + Botanical Hemisphere Lighting
+    const hemiLight = new THREE.HemisphereLight(0xf5f3ee, 0x3b5243, 1.12);
     hemiLight.position.set(0, 4, 0);
     scene.add(hemiLight);
 
@@ -686,11 +704,11 @@
     dirLight.shadow.mapSize.height = 1024;
     dirLight.shadow.camera.near = 0.2;
     dirLight.shadow.camera.far = 12;
-    const d = 1.6;
-    dirLight.shadow.camera.left = -d;
-    dirLight.shadow.camera.right = d;
-    dirLight.shadow.camera.top = d;
-    dirLight.shadow.camera.bottom = -d;
+    const shadowExtent = 1.6;
+    dirLight.shadow.camera.left = -shadowExtent;
+    dirLight.shadow.camera.right = shadowExtent;
+    dirLight.shadow.camera.top = shadowExtent;
+    dirLight.shadow.camera.bottom = -shadowExtent;
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
 
@@ -698,12 +716,12 @@
     rimLight.position.set(-2.5, 2.0, -2.2);
     scene.add(rimLight);
 
-    // Root World Anchor Group (continuously attached to RaycastAnchorManager hit point)
+    // Root World Anchor Group (attached to RaycastAnchorManager hit point)
     const worldAnchorGroup = new THREE.Group();
     worldAnchorGroup.visible = false;
     scene.add(worldAnchorGroup);
 
-    // Soft Botanical Ground Ripple Ring & Surface Contact Shadow
+    // Soft Botanical Ground Pulse Rings
     const groundRingGeo = new THREE.RingGeometry(0.22, 0.25, 64);
     groundRingGeo.rotateX(-Math.PI / 2);
     const groundRingMat = new THREE.MeshBasicMaterial({
@@ -728,7 +746,7 @@
     outerRippleMesh.position.y = 0.002;
     worldAnchorGroup.add(outerRippleMesh);
 
-    // Container for the loaded/reconstructed 3D Model
+    // Model Pivot Container
     const modelPivot = new THREE.Group();
     worldAnchorGroup.add(modelPivot);
 
@@ -740,13 +758,12 @@
 
     /**
      * ============================================================================
-     * 5. SPATIAL RAYCAST SURFACE & RETICLE ATTACHMENT MANAGER
+     * 5. RAYCAST ANCHOR MANAGER (THREE.Raycaster + 6DoF IMU FUSION)
      * ============================================================================
-     * Continuously scans the camera view / real-world ground plane area using
-     * THREE.Raycaster, intersecting the detected optical reticle screen centroid
-     * (NDC u, v) with the real-world horizontal surface plane and perspective depth
-     * plane, blending with 6DoF IMU motion so the Mind Tree stays firmly attached
-     * to the physical reticle surface in real-world X, Y, Z coordinates.
+     * Projects rays through the detected optical reticle's screen coordinates onto
+     * a 3D ground surface plane (Y = -0.22m) and fuses optical depth/position
+     * estimation with 6DoF DeviceOrientationEvent & DeviceMotionEvent stabilization
+     * so the 3D Mind Tree stays rooted on the physical surface where the reticle rests.
      */
     class RaycastAnchorManager {
       constructor(threeScene, threeCamera) {
@@ -754,14 +771,11 @@
         this.camera = threeCamera;
         this.raycaster = new THREE.Raycaster();
 
-        // Real-world horizontal surface plane (e.g., tabletop / floor at Y = -0.22m)
+        // Ground surface plane at Y = -0.22m
         this.surfaceY = -0.22;
-        this.worldSurfacePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.surfaceY);
-
-        // Fallback frontal depth plane when camera is held parallel to horizon
         this.frontalPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.78);
 
-        // Invisible spatial raycast collider mesh representing the scanned real-world area
+        // 3D ground collider mesh representing the physical tabletop / floor
         const scanPlaneGeo = new THREE.PlaneGeometry(8, 8);
         scanPlaneGeo.rotateX(-Math.PI / 2);
         const scanPlaneMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -769,18 +783,11 @@
         this.surfaceCollider.position.y = this.surfaceY;
         this.scene.add(this.surfaceCollider);
 
-        // Smoothed world raycast hit point
         this.currentHitPoint = new THREE.Vector3(0, this.surfaceY, -0.75);
-        this.hasSurfaceHit = false;
       }
 
-      /**
-       * Casts a ray from the camera through the detected reticle's screen NDC (u, v)
-       * onto the real-world surface plane, estimating depth from both surface
-       * intersection and apparent reticle bounding size.
-       */
       update(reticleNDC, apparentScale, isReticleVisible, sensorOffset, deviceEuler, hasGyro) {
-        // Keep camera orientation synced with device gyroscope so raycasts reflect real view angle
+        // Sync virtual camera rotation with device gyroscope
         if (hasGyro) {
           this.camera.rotation.x = THREE.MathUtils.lerp(
             this.camera.rotation.x,
@@ -800,19 +807,18 @@
         }
         this.camera.updateMatrixWorld();
 
-        // Cast ray through detected reticle center (or screen center while scanning)
+        // Cast ray through detected reticle's screen coordinates (or center while searching)
         const rayCoords = isReticleVisible ? reticleNDC : new THREE.Vector2(0, -0.06);
         this.raycaster.setFromCamera(rayCoords, this.camera);
 
-        // 1. Primary Raycast against the 3D surface collider mesh
+        // Primary raycast against the 3D ground surface plane (Y = -0.22m)
         const hits = this.raycaster.intersectObject(this.surfaceCollider, false);
         const hitTarget = new THREE.Vector3();
 
         if (hits.length > 0 && hits[0].distance < 3.2 && hits[0].distance > 0.25) {
           hitTarget.copy(hits[0].point);
-          this.hasSurfaceHit = true;
         } else {
-          // 2. Fallback Ray-Plane intersection when phone is tilted horizontally
+          // Fallback frontal plane intersection if camera is angled upward
           const planeHit = new THREE.Vector3();
           const didHit = this.raycaster.ray.intersectPlane(this.frontalPlane, planeHit);
           if (didHit) {
@@ -821,19 +827,17 @@
           } else {
             hitTarget.set(0, this.surfaceY, -0.75);
           }
-          this.hasSurfaceHit = true;
         }
 
-        // Refine Z depth using apparent reticle size when actively tracking the marker
+        // Refine Z depth using apparent reticle bounding scale when actively locked
         if (isReticleVisible && apparentScale > 0.2) {
           const estimatedDepthZ = THREE.MathUtils.clamp(-0.75 / apparentScale, -1.65, -0.38);
           hitTarget.z = THREE.MathUtils.lerp(hitTarget.z, estimatedDepthZ, 0.35);
         }
 
-        // Apply 6DoF IMU translational compensation when user steps around the anchored tree
+        // Fuse 6DoF IMU translational compensation
         hitTarget.sub(sensorOffset);
 
-        // Smoothly attach anchor to the raycast surface point
         const lerpFactor = isReticleVisible ? 0.22 : 0.10;
         this.currentHitPoint.lerp(hitTarget, lerpFactor);
         return this.currentHitPoint;
@@ -841,14 +845,18 @@
 
       reset() {
         this.currentHitPoint.set(0, this.surfaceY, -0.75);
-        this.hasSurfaceHit = false;
       }
     }
 
     const raycastManager = new RaycastAnchorManager(scene, camera);
 
     /**
-     * Reconstructs the exact 5-node scene from Khronos glTF Blender I/O v4.5.48
+     * Reconstructs the 5-node Khronos glTF Blender I/O v4.5.48 Mind Tree scene:
+     * 0: Cube (Material.001 sculpted crystal)
+     * 1: Cylinder (treeTrunk_Material branching trunk)
+     * 2: Sphere.003 (tree_Material green canopy)
+     * 3: Cube.001 (Material.003 metallic ice-blue spire)
+     * 4: Plane.002 (Material.002 dark ground anchor with soft contact shadow)
      */
     function buildDefaultMindTreeGLTFScene() {
       const root = new THREE.Group();
@@ -871,7 +879,7 @@
         return geo;
       }
 
-      // NODE 0: Cube (mesh Cube.001) — Sculpted blue-slate crystal form
+      // NODE 0: Cube (Crystal)
       const mat001 = new THREE.MeshStandardMaterial({
         name: 'Material.001',
         color: new THREE.Color(0.502, 0.650, 0.800),
@@ -893,7 +901,7 @@
       node0Cube.receiveShadow = true;
       root.add(node0Cube);
 
-      // NODE 1: Cylinder (mesh Cylinder.001) — Branching terracotta tree trunk
+      // NODE 1: Cylinder (Branching Trunk)
       const treeTrunkMat = new THREE.MeshStandardMaterial({
         name: 'treeTrunk_Material',
         color: new THREE.Color(0.800, 0.201, 0.147),
@@ -941,7 +949,7 @@
 
       root.add(node1TrunkGroup);
 
-      // NODE 2: Sphere.003 (mesh Sphere.003) — Lush green sculpted tree canopy
+      // NODE 2: Sphere.003 (Green Canopy)
       const treeMat = new THREE.MeshStandardMaterial({
         name: 'tree_Material',
         color: new THREE.Color(0.052, 0.800, 0.094),
@@ -976,7 +984,7 @@
 
       root.add(node2CanopyGroup);
 
-      // NODE 3: Cube.001 (mesh Cube) — Slender metallic ice-blue spire/prism
+      // NODE 3: Cube.001 (Metallic Ice-Blue Spire)
       const mat003 = new THREE.MeshStandardMaterial({
         name: 'Material.003',
         color: new THREE.Color(0.658, 0.919, 1.0),
@@ -994,14 +1002,14 @@
       node3Spire.receiveShadow = true;
       root.add(node3Spire);
 
-      // NODE 4: Plane.002 (mesh Plane.002) — Dark ground/base plane shadow anchor
+      // NODE 4: Plane.002 (Ground Anchor with Soft Contact Shadow)
       const mat002 = new THREE.MeshStandardMaterial({
         name: 'Material.002',
         color: new THREE.Color(0.03, 0.03, 0.03),
         metalness: 0.0,
         roughness: 0.5,
         transparent: true,
-        opacity: 0.58,
+        opacity: 0.56,
         side: THREE.DoubleSide
       });
       const planeGeo = new THREE.PlaneGeometry(0.95, 0.95);
@@ -1012,12 +1020,12 @@
       node4Plane.receiveShadow = true;
       root.add(node4Plane);
 
+      // Normalize bounding box to rest at Y = 0 on the anchor surface
       const bbox = new THREE.Box3().setFromObject(root);
       const center = bbox.getCenter(new THREE.Vector3());
       const size = bbox.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const targetHeight = 0.58;
-      const normScale = targetHeight / maxDim;
+      const normScale = 0.58 / maxDim;
 
       const wrapper = new THREE.Group();
       root.position.set(-center.x, -bbox.min.y, -center.z);
@@ -1042,12 +1050,8 @@
 
     /**
      * ============================================================================
-     * 6. REAL-TIME FIDUCIAL SCANNER & RETICLE CENTROID TRACKER
+     * 6. REAL-TIME COMPUTER-VISION RETICLE SCANNER & AUTO-SPAWN ENGINE
      * ============================================================================
-     * Scans the full camera frame to locate the concentric square + center oval
-     * reticle, returning both match confidence [0..1], normalized screen centroid
-     * (NDC u, v), and apparent scale so RaycastAnchorManager keeps the tree
-     * attached directly onto the reticle in real space.
      */
     const videoEl = document.getElementById('camera-feed');
     const visionCanvas = document.getElementById('vision-canvas');
@@ -1119,15 +1123,12 @@
 
     function scanReticlePose(imgData, w, h) {
       const data = imgData.data;
-
-      // Multi-scale & spatial grid search around the frame so the tree stays locked
-      // to the reticle even as the user moves their phone around it
       const candidateOffsets = [
         [0, 0],
         [-14, 0], [14, 0], [0, -14], [0, 14],
         [-24, -18], [24, -18], [-24, 18], [24, 18]
       ];
-      const candidateScales = [46, 58, 70]; // half-box radii in 160x160 space
+      const candidateScales = [46, 58, 70];
 
       let bestScore = 0;
       let bestCx = w * 0.5;
@@ -1149,7 +1150,6 @@
         }
       }
 
-      // Convert pixel center in cropped square back to screen NDC (-1..1)
       const ndcX = ((bestCx / w) - 0.5) * 1.25;
       const ndcY = -((bestCy / h) - 0.5) * 1.25;
       const apparentScale = bestHalfBox / 58;
@@ -1214,7 +1214,7 @@
       state.matchScore = score;
       document.getElementById('telemetry-score').textContent = `${Math.round(score * 100)}%`;
 
-      // Automatic Hands-Free Spawning upon Reticle Lock (no tap required)
+      // Hands-free automatic spawning once locked (no tap required)
       if (score >= state.lockThreshold) {
         state.consecutiveHits++;
         state.consecutiveMisses = 0;
@@ -1224,38 +1224,32 @@
       } else {
         state.consecutiveMisses++;
         state.consecutiveHits = 0;
-        // Keep the tree persistently anchored in 6DoF space once spawned;
-        // only gently update subtitle if reticle moves out of view
         if (state.consecutiveMisses === 25 && state.isTargetLocked) {
           document.getElementById('status-subtitle').textContent = 'Anchored in 6DoF space • Walk around freely';
         }
       }
     }
 
-    /**
-     * Automatically spawns and grows the 3D Mind Tree on the detected reticle surface
-     * with zero user taps required.
-     */
     function autoSpawnMindTree(reason = 'Mind Tree rooted on reticle') {
       const wasAlreadyLocked = state.isTargetLocked;
       state.isTargetLocked = true;
       worldAnchorGroup.visible = true;
 
       if (!wasAlreadyLocked) {
-        state.bloomProgress = 0.04; // Begin organic bloom animation from seed
+        state.bloomProgress = 0.04;
         state.sensorOffset.set(0, 0, 0);
         soundscape.playBloomChime();
         showToast('Mind Tree bloomed automatically on your surface.');
       }
 
-      document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#4c6b56]';
+      document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#3b5243]';
       document.getElementById('status-title').textContent = reason;
-      document.getElementById('status-subtitle').textContent = 'Attached to reticle surface plane';
+      document.getElementById('status-subtitle').textContent = 'Attached to reticle ground plane';
       document.getElementById('reticle-box').classList.add('locked');
       document.getElementById('ghost-reticle-guide').style.opacity = '0.0';
       document.getElementById('scan-wave').style.display = 'none';
-      document.getElementById('reticle-container').style.opacity = '0.28';
-      document.getElementById('reticle-hint').textContent = 'Drag to turn • Pinch to resize • Move around in 6DoF';
+      document.getElementById('reticle-container').style.opacity = '0.26';
+      document.getElementById('reticle-hint').textContent = 'Drag to rotate • Pinch to scale • Move around in 6DoF';
     }
 
     function resetAndRescanSurface() {
@@ -1272,15 +1266,15 @@
         worldAnchorGroup.visible = false;
       }
 
-      document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#a68a64] animate-pulse';
-      document.getElementById('status-title').textContent = 'Gently scanning for reticle…';
-      document.getElementById('status-subtitle').textContent = 'Tree blooms automatically upon alignment';
+      document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#7c9a82] animate-pulse';
+      document.getElementById('status-title').textContent = 'Scanning for reticle…';
+      document.getElementById('status-subtitle').textContent = 'Auto-spawns tree when marker is aligned';
       document.getElementById('reticle-box').classList.remove('locked');
       document.getElementById('ghost-reticle-guide').style.opacity = '0.25';
       document.getElementById('scan-wave').style.display = 'block';
       document.getElementById('reticle-container').style.opacity = '1';
-      document.getElementById('reticle-hint').innerHTML = 'Align <span class="text-[#c5d6c8] font-semibold">Reticle for Mind TreeV3</span> — spawns automatically';
-      showToast('Ready to scan — point at the reticle to auto-spawn.');
+      document.getElementById('reticle-hint').innerHTML = 'Frame <span class="text-[#a8c0ae] font-semibold">Reticle for Mind TreeV3</span> — spawns automatically';
+      showToast('Surface reset — frame the reticle to auto-spawn.');
     }
 
     let toastTimer = null;
@@ -1294,7 +1288,7 @@
 
     /**
      * ============================================================================
-     * 7. CAMERA PERMISSIONS & iOS/ANDROID 6DoF DEVICE SENSORS
+     * 7. MOBILE CAMERA & iOS 13+ MOTION SENSOR PERMISSIONS
      * ============================================================================
      */
     async function initMobileSensors() {
@@ -1360,9 +1354,9 @@
       await initMobileSensors();
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        errorBox.textContent = 'Camera unavailable in this browser. Opening Garden Preview…';
+        errorBox.textContent = 'Camera unavailable in this environment. Switching to Interactive Demo Mode…';
         errorBox.classList.remove('hidden');
-        setTimeout(activateGardenPreviewMode, 900);
+        setTimeout(activateInteractiveDemoMode, 950);
         return;
       }
 
@@ -1384,31 +1378,30 @@
         document.getElementById('demo-backdrop').style.display = 'none';
         document.getElementById('permission-modal').classList.add('hidden');
       } catch (err) {
-        console.warn('Camera permission declined or unavailable:', err);
-        errorBox.textContent = 'Camera access declined or unavailable. Opening Garden Preview…';
+        console.warn('Camera permission denied or unavailable:', err);
+        errorBox.textContent = 'Camera access denied or unavailable. Switching to Interactive Demo Mode…';
         errorBox.classList.remove('hidden');
-        setTimeout(activateGardenPreviewMode, 1100);
+        setTimeout(activateInteractiveDemoMode, 1100);
       }
     }
 
-    function activateGardenPreviewMode() {
+    function activateInteractiveDemoMode() {
       state.isCameraActive = false;
       state.isDemoMode = true;
       document.getElementById('permission-modal').classList.add('hidden');
       document.getElementById('demo-backdrop').style.display = 'block';
       document.getElementById('telemetry-score').textContent = '100%';
-      autoSpawnMindTree('Garden Sanctuary Preview');
+      autoSpawnMindTree('Interactive Demo Mode');
     }
 
     /**
      * ============================================================================
-     * 8. GENTLE TOUCH & PINCH GESTURES FOR ROTATING & SCALING THE TREE
+     * 8. TOUCH & POINTER INTERACTION (DRAG TO ROTATE, PINCH/WHEEL TO SCALE)
      * ============================================================================
      */
     arCanvas.addEventListener('pointerdown', (e) => {
       state.isDragging = true;
       state.lastPointerX = e.clientX;
-      state.lastPointerY = e.clientY;
     });
 
     window.addEventListener('pointermove', (e) => {
@@ -1456,7 +1449,7 @@
 
     /**
      * ============================================================================
-     * 9. CUSTOM ASSET LOADERS (.GLB / .GLTF & CUSTOM TARGET IMAGE)
+     * 9. CUSTOM .GLB / .GLTF & TARGET IMAGE UPLOADERS
      * ============================================================================
      */
     const gltfLoader = new THREE.GLTFLoader();
@@ -1499,7 +1492,7 @@
         undefined,
         (err) => {
           console.error('GLB Load Error:', err);
-          showToast('Unable to parse .GLB file. Restored default Mind Tree.');
+          showToast('Could not parse .GLB file. Restored default Mind Tree.');
           URL.revokeObjectURL(url);
         }
       );
@@ -1532,7 +1525,7 @@
           document.getElementById('modal-reticle-img').src = dataUrl;
           document.getElementById('hud-mini-reticle').src = dataUrl;
           document.getElementById('ghost-reticle-guide').src = dataUrl;
-          showToast(`Custom reticle "${file.name}" active.`);
+          showToast(`Custom target marker "${file.name}" active.`);
         };
         img.src = dataUrl;
       };
@@ -1542,16 +1535,16 @@
     document.getElementById('btn-restore-default-tree').addEventListener('click', () => {
       setModelInPivot(buildDefaultMindTreeGLTFScene());
       document.getElementById('active-model-name').textContent = 'MindTree_Blender_v4.5.48 (5 Nodes)';
-      showToast('Restored 5-node Mind Tree.');
+      showToast('Restored default 5-node Mind Tree.');
     });
 
     /**
      * ============================================================================
-     * 10. UI BUTTONS, SOUND TOGGLE & DRAWER WIRING
+     * 10. UI EVENT LISTENERS
      * ============================================================================
      */
     document.getElementById('btn-start-ar').addEventListener('click', startARCameraExperience);
-    document.getElementById('btn-demo-mode').addEventListener('click', activateGardenPreviewMode);
+    document.getElementById('btn-demo-mode').addEventListener('click', activateInteractiveDemoMode);
 
     document.getElementById('btn-open-marker').addEventListener('click', () => {
       document.getElementById('marker-modal').classList.remove('hidden');
@@ -1582,7 +1575,7 @@
       document.getElementById('icon-audio-off').classList.toggle('hidden', active);
       document.getElementById('icon-audio-on').classList.toggle('hidden', !active);
       document.getElementById('label-audio').textContent = active ? 'Ambience On' : 'Sound Off';
-      showToast(active ? 'Gentle forest breeze & chime enabled.' : 'Ambient sound muted.');
+      showToast(active ? 'Therapeutic breeze & singing bowl enabled.' : 'Ambient audio muted.');
     });
 
     const drawerPanel = document.getElementById('drawer-panel');
@@ -1610,7 +1603,7 @@
 
     /**
      * ============================================================================
-     * 11. RESPONSIVE RESIZE & 60FPS RAYCAST RENDER LOOP
+     * 11. RESPONSIVE RESIZE & 60FPS ANIMATION LOOP
      * ============================================================================
      */
     function handleResize() {
@@ -1629,10 +1622,10 @@
       const now = performance.now();
       const elapsed = clock.getElapsedTime();
 
-      // 1. Run real-time fiducial marker scanner & pose tracker
+      // 1. Real-time computer-vision reticle scanning
       processCameraVision(now);
 
-      // 2. Raycast surface scanner keeps the 3D tree attached directly to the reticle
+      // 2. RaycastAnchorManager updates 3D surface position from reticle + 6DoF IMU
       const raycastSurfacePos = raycastManager.update(
         state.reticleNDC,
         state.reticleApparentScale,
@@ -1644,11 +1637,10 @@
       state.anchorPos.copy(raycastSurfacePos);
       worldAnchorGroup.position.copy(state.anchorPos);
 
-      // 3. Smooth organic bloom scale-in when the tree spawns automatically
+      // 3. Smooth cubic ease-out bloom scale-in when spawned
       if (state.isTargetLocked && state.bloomProgress < 1) {
         state.bloomProgress = Math.min(1, state.bloomProgress + 0.032);
       }
-      // Cubic ease-out bloom curve
       const easeBloom = 1 - Math.pow(1 - state.bloomProgress, 3);
       const effectiveScale = state.userScale * Math.max(0.01, easeBloom);
 
@@ -1662,7 +1654,7 @@
         0.15
       );
 
-      // 4. Subtle therapeutic breeze animation on the Mind Tree & surface ripples
+      // 4. Gentle wind sway on canopy, spire levitation & ground ripple rings
       if (state.animateModel && worldAnchorGroup.visible) {
         if (animatedParts.canopy) {
           animatedParts.canopy.rotation.z = Math.sin(elapsed * 1.15) * 0.032;
@@ -1676,7 +1668,7 @@
         outerRippleMat.opacity = 0.32 * (1.15 - rippleScale);
       }
 
-      // 5. Update live Raycast X/Y/Z spatial telemetry HUD
+      // 5. Update live X / Y / Z spatial telemetry HUD
       document.getElementById('telemetry-x').textContent = `${state.anchorPos.x >= 0 ? '+' : ''}${state.anchorPos.x.toFixed(2)}m`;
       document.getElementById('telemetry-y').textContent = `${state.anchorPos.y >= 0 ? '+' : ''}${state.anchorPos.y.toFixed(2)}m`;
       document.getElementById('telemetry-z').textContent = `${state.anchorPos.z.toFixed(2)}m`;
