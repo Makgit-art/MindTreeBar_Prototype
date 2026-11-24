@@ -457,23 +457,27 @@
       <!-- Visual Highlight Banner -->
       <div class="rounded-2xl bg-white/10 border border-white/15 p-3.5 mb-4 text-left space-y-2">
         <div class="flex items-center justify-between text-xs">
-          <span class="font-bold text-[#ffd859]">🎙️ Audio File Playback (AdinMindTree_09.wav)</span>
-          <span id="bet36-audio-status" class="font-mono-tech text-[11px] text-[#50fa7b]">Playing audio…</span>
+          <span class="font-bold text-[#ffd859]">🎙️ BET 36 Voiceover (AdinMindTree_09.wav)</span>
+          <span id="bet36-audio-status" class="font-mono-tech text-[11px] text-[#50fa7b]">Playing voiceover…</span>
         </div>
-        <audio id="bet36-voice-audio" preload="auto" playsinline class="w-full h-9 rounded-lg mt-1"></audio>
+        <audio id="bet36-voice-audio" preload="auto" playsinline class="hidden w-full h-9 rounded-lg mt-1"></audio>
         <div class="w-full h-1.5 rounded-full bg-white/15 overflow-hidden">
           <div id="bet36-progress-bar" class="h-full bg-gradient-to-r from-[#ffd859] to-[#8be9fd] w-0 transition-all duration-150"></div>
         </div>
       </div>
 
-      <div class="flex items-center justify-center gap-2">
-        <button id="btn-replay-bet36-voice" class="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-[#f4c430] to-[#ff9f43] hover:brightness-105 text-[#141829] font-extrabold text-xs sm:text-sm shadow-lg transition active:scale-95">
-          🔊 Play / Replay Audio File
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
+        <button id="btn-replay-bet36-voice" class="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-[#f4c430] to-[#ff9f43] hover:brightness-105 text-[#141829] font-extrabold text-xs sm:text-sm shadow-lg transition active:scale-95">
+          🔊 Play / Replay Voiceover
         </button>
+        <label class="w-full sm:w-auto py-3 px-3.5 rounded-2xl bg-white/12 hover:bg-white/20 border border-white/25 text-white font-semibold text-xs cursor-pointer transition text-center">
+          <span>Load .WAV</span>
+          <input id="input-bet36-wav" type="file" accept="audio/*" class="hidden" />
+        </label>
       </div>
 
       <p id="bet36-exit-hint" class="mt-3 text-[10px] text-white/60">
-        Exit button will appear in the top right once the audio file finishes playing.
+        Exit button will appear in the top right once the voiceover finishes playing.
       </p>
     </div>
   </div>
@@ -1076,113 +1080,71 @@
 
     /**
      * ============================================================================
-     * 4C. "BET 36" POP-UP AD & REAL AUDIO FILE PLAYBACK (AdinMindTree_09.wav)
+     * 4C. "BET 36" POP-UP AD & SPOKEN VOICEOVER PLAYBACK (AdinMindTree_09.wav)
      * ============================================================================
      */
     const BET36_AUDIO_FILENAME = 'AdinMindTree_09.wav';
     const BET36_VOICE_SCRIPT =
       "Feeling bored from work? It's time for a new adventure. Bet 36 has got you covered. VR table games, and live performances from your favorite Vocaloid. You'll never get bored of Bet 36. Eligible only in Ontario. If you or someone you know has problems with gambling, tap your Mind Tree bar now.";
 
-    let bet36CachedAudioUrl = null;
+    let bet36UploadedAudioUrl = null;
+    let bet36SpeechProgressTimer = null;
+    let bet36HasExternalWav = false;
 
-    /**
-     * Generates a real, playable 16-bit PCM WAV audio file Blob matching the
-     * exact 15.5-second cadence and warm vocal-formant contour of AdinMindTree_09.wav
-     * so <audio> playback works natively across all mobile/desktop browsers
-     * even when external file paths aren't hosted alongside the single-file HTML.
-     */
-    function buildBet36FallbackWavBlobUrl() {
-      if (bet36CachedAudioUrl) return bet36CachedAudioUrl;
-
-      const sampleRate = 22050;
-      const durationSec = 15.5;
-      const numSamples = Math.floor(sampleRate * durationSec);
-      const dataBytes = numSamples * 2;
-      const buffer = new ArrayBuffer(44 + dataBytes);
-      const view = new DataView(buffer);
-
-      const writeStr = (offset, str) => {
-        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    // Preload voices early so mobile browsers have English voices ready
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
       };
-
-      writeStr(0, 'RIFF');
-      view.setUint32(4, 36 + dataBytes, true);
-      writeStr(8, 'WAVE');
-      writeStr(12, 'fmt ');
-      view.setUint32(16, 16, true);
-      view.setUint16(20, 1, true); // PCM
-      view.setUint16(22, 1, true); // Mono
-      view.setUint32(24, sampleRate, true);
-      view.setUint32(28, sampleRate * 2, true);
-      view.setUint16(32, 2, true);
-      view.setUint16(34, 16, true);
-      writeStr(36, 'data');
-      view.setUint32(40, dataBytes, true);
-
-      // Phrase timing windows matching AdinMindTree_09.wav
-      const phrases = [
-        [0.2, 1.8, 138],   // "Feeling bored from work?"
-        [2.3, 4.1, 146],   // "It's time for a new adventure."
-        [4.5, 6.2, 154],   // "Bet 36 has got you covered."
-        [6.5, 9.5, 148],   // "VR table games, and live performances from your favorite Vocaloid."
-        [9.8, 11.6, 156],  // "You'll never get bored of Bet 36."
-        [12.0, 15.2, 134]  // "Eligible only in Ontario..."
-      ];
-
-      let phase = 0;
-      for (let i = 0; i < numSamples; i++) {
-        const t = i / sampleRate;
-        let env = 0;
-        let f0 = 140;
-
-        for (let p = 0; p < phrases.length; p++) {
-          const [start, end, pitch] = phrases[p];
-          if (t >= start && t <= end) {
-            const localT = t - start;
-            const dur = end - start;
-            const attack = Math.min(1, localT / 0.08);
-            const release = Math.min(1, (dur - localT) / 0.12);
-            // Syllable cadence modulation (~4.8 syllables/sec)
-            const syllable = 0.55 + 0.45 * Math.sin(localT * Math.PI * 9.6);
-            env = attack * release * syllable;
-            f0 = pitch + Math.sin(localT * 4.2) * 11;
-            break;
-          }
-        }
-
-        phase += (2 * Math.PI * f0) / sampleRate;
-        // Warm vocal-tract harmonic synthesis (fundamental + 2nd/3rd/5th formants)
-        const voiceWave =
-          Math.sin(phase) * 0.52 +
-          Math.sin(phase * 2) * 0.28 +
-          Math.sin(phase * 3) * 0.14 +
-          Math.sin(phase * 5) * 0.06;
-
-        const sample = Math.max(-1, Math.min(1, voiceWave * env * 0.72));
-        view.setInt16(44 + i * 2, sample * 32767, true);
-      }
-
-      const wavBlob = new Blob([buffer], { type: 'audio/wav' });
-      bet36CachedAudioUrl = URL.createObjectURL(wavBlob);
-      return bet36CachedAudioUrl;
     }
 
-    async function resolveBet36AudioSource(audioEl) {
-      if (audioEl.dataset.resolvedSrc) {
-        return audioEl.dataset.resolvedSrc;
-      }
+    // Unlock SpeechSynthesis on first user tap so auto-triggered ad voiceover plays on iOS/Android
+    function unlockSpeechEngine() {
+      if (!('speechSynthesis' in window)) return;
+      try {
+        const primer = new SpeechSynthesisUtterance('');
+        primer.volume = 0;
+        window.speechSynthesis.speak(primer);
+      } catch (e) {}
+    }
+
+    async function checkExternalBet36Wav() {
+      if (bet36UploadedAudioUrl) return bet36UploadedAudioUrl;
       try {
         const resp = await fetch(BET36_AUDIO_FILENAME, { method: 'HEAD' });
         if (resp.ok) {
-          audioEl.dataset.resolvedSrc = BET36_AUDIO_FILENAME;
+          bet36HasExternalWav = true;
           return BET36_AUDIO_FILENAME;
         }
-      } catch (e) {
-        // Fallback to generated WAV audio file blob when local file isn't served
-      }
-      const fallbackUrl = buildBet36FallbackWavBlobUrl();
-      audioEl.dataset.resolvedSrc = fallbackUrl;
-      return fallbackUrl;
+      } catch (e) {}
+      return null;
+    }
+
+    function pickBestEnglishVoice() {
+      if (!('speechSynthesis' in window)) return null;
+      const voices = window.speechSynthesis.getVoices() || [];
+      return (
+        voices.find((v) => /en[-_](CA|US|GB)/i.test(v.lang) && /natural|google|samantha|daniel|alex|aria|guy/i.test(v.name)) ||
+        voices.find((v) => /en[-_](CA|US|GB)/i.test(v.lang)) ||
+        voices.find((v) => /^en/i.test(v.lang)) ||
+        voices[0] ||
+        null
+      );
+    }
+
+    function completeBet36PlaybackUI() {
+      clearInterval(bet36SpeechProgressTimer);
+      const exitBtn = document.getElementById('btn-close-bet36-ad');
+      const statusEl = document.getElementById('bet36-audio-status');
+      const progressBar = document.getElementById('bet36-progress-bar');
+      const exitHint = document.getElementById('bet36-exit-hint');
+
+      progressBar.style.width = '100%';
+      statusEl.textContent = 'Completed';
+      statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
+      exitBtn.classList.remove('hidden');
+      exitHint.textContent = 'Tap ✕ in the top right to return to your Mind Tree.';
     }
 
     async function playBet36VoiceRecording() {
@@ -1192,51 +1154,102 @@
       const progressBar = document.getElementById('bet36-progress-bar');
       const exitHint = document.getElementById('bet36-exit-hint');
 
-      // Hide exit button while the audio file is actively playing
+      clearInterval(bet36SpeechProgressTimer);
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+      }
+      audioEl.pause();
+
+      // Hide exit button while voiceover is playing
       exitBtn.classList.add('hidden');
-      statusEl.textContent = 'Playing audio…';
+      statusEl.textContent = 'Playing voiceover…';
       statusEl.className = 'font-mono-tech text-[11px] text-[#50fa7b]';
       progressBar.style.width = '0%';
-      exitHint.textContent = 'Exit button will appear in the top right once the audio file finishes playing.';
+      exitHint.textContent = 'Exit button will appear in the top right once the voiceover finishes playing.';
 
-      const srcUrl = await resolveBet36AudioSource(audioEl);
-      if (audioEl.src !== srcUrl) {
-        audioEl.src = srcUrl;
-      }
-
-      audioEl.ontimeupdate = () => {
-        if (audioEl.duration && isFinite(audioEl.duration)) {
-          const pct = Math.min(100, (audioEl.currentTime / audioEl.duration) * 100);
-          progressBar.style.width = `${pct.toFixed(1)}%`;
+      // 1. If AdinMindTree_09.wav is hosted or uploaded by the user, play the real WAV file directly
+      const wavSrc = await checkExternalBet36Wav();
+      if (wavSrc) {
+        audioEl.classList.remove('hidden');
+        if (audioEl.src !== wavSrc) {
+          audioEl.src = wavSrc;
         }
-      };
-
-      audioEl.onended = () => {
-        progressBar.style.width = '100%';
-        statusEl.textContent = 'Completed';
-        statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
-        exitBtn.classList.remove('hidden');
-        exitHint.textContent = 'Tap ✕ in the top right to return to your Mind Tree.';
-      };
-
-      audioEl.currentTime = 0;
-      audioEl.volume = 1.0;
-
-      // Also trigger spoken voice synthesis alongside if supported, while <audio> drives real playback & completion
-      if ('speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel();
-          const utter = new SpeechSynthesisUtterance(BET36_VOICE_SCRIPT);
-          utter.rate = 1.02;
-          utter.volume = 1.0;
-          window.speechSynthesis.speak(utter);
-        } catch (e) {}
+        audioEl.ontimeupdate = () => {
+          if (audioEl.duration && isFinite(audioEl.duration)) {
+            const pct = Math.min(100, (audioEl.currentTime / audioEl.duration) * 100);
+            progressBar.style.width = `${pct.toFixed(1)}%`;
+          }
+        };
+        audioEl.onended = completeBet36PlaybackUI;
+        audioEl.currentTime = 0;
+        audioEl.volume = 1.0;
+        audioEl.play().catch(() => {
+          statusEl.textContent = 'Tap Play Voiceover below';
+          statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
+        });
+        return;
       }
 
-      audioEl.play().catch(() => {
-        statusEl.textContent = 'Tap Play Audio below';
-        statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
-      });
+      // 2. Otherwise speak the clear voiceover directly via SpeechSynthesis (no synthetic hum)
+      audioEl.classList.add('hidden');
+      if ('speechSynthesis' in window) {
+        const utter = new SpeechSynthesisUtterance(BET36_VOICE_SCRIPT);
+        const chosenVoice = pickBestEnglishVoice();
+        if (chosenVoice) utter.voice = chosenVoice;
+        utter.lang = 'en-CA';
+        utter.rate = 1.02;
+        utter.pitch = 1.02;
+        utter.volume = 1.0;
+
+        const estDurationMs = 15500;
+        const startTs = performance.now();
+        let finished = false;
+
+        const finishOnce = () => {
+          if (finished) return;
+          finished = true;
+          completeBet36PlaybackUI();
+        };
+
+        utter.onboundary = (ev) => {
+          if (typeof ev.charIndex === 'number') {
+            const pct = Math.min(98, (ev.charIndex / BET36_VOICE_SCRIPT.length) * 100);
+            progressBar.style.width = `${pct.toFixed(1)}%`;
+          }
+        };
+
+        utter.onend = finishOnce;
+        utter.onerror = () => {
+          statusEl.textContent = 'Tap Play Voiceover below';
+          statusEl.className = 'font-mono-tech text-[11px] text-[#ffd859]';
+          clearInterval(bet36SpeechProgressTimer);
+        };
+
+        // Fallback progress & completion timer in case mobile Safari omits onend
+        bet36SpeechProgressTimer = setInterval(() => {
+          const elapsed = performance.now() - startTs;
+          const pct = Math.min(99, (elapsed / estDurationMs) * 100);
+          const currentWidth = parseFloat(progressBar.style.width) || 0;
+          if (pct > currentWidth) {
+            progressBar.style.width = `${pct.toFixed(1)}%`;
+          }
+          if (!window.speechSynthesis.speaking && elapsed > 2500) {
+            finishOnce();
+          } else if (elapsed >= estDurationMs + 1500) {
+            finishOnce();
+          }
+        }, 150);
+
+        window.speechSynthesis.speak(utter);
+      } else {
+        // Fallback timer if browser has no speech API
+        let pct = 0;
+        bet36SpeechProgressTimer = setInterval(() => {
+          pct += 2;
+          progressBar.style.width = `${Math.min(100, pct)}%`;
+          if (pct >= 100) completeBet36PlaybackUI();
+        }, 250);
+      }
     }
 
     function openBet36AdPopup() {
@@ -1247,6 +1260,7 @@
     }
 
     function closeBet36AdPopup() {
+      clearInterval(bet36SpeechProgressTimer);
       const audioEl = document.getElementById('bet36-voice-audio');
       if (audioEl) {
         audioEl.pause();
@@ -2460,7 +2474,10 @@
      * 9. UI BUTTONS, SOUND TOGGLE & DRAWER WIRING
      * ============================================================================
      */
-    document.getElementById('btn-start-ar').addEventListener('click', startARCameraExperience);
+    document.getElementById('btn-start-ar').addEventListener('click', () => {
+      unlockSpeechEngine();
+      startARCameraExperience();
+    });
 
     document.getElementById('btn-open-marker').addEventListener('click', () => {
       document.getElementById('marker-modal').classList.remove('hidden');
@@ -2480,17 +2497,31 @@
     });
 
     document.getElementById('btn-simulate-lock').addEventListener('click', () => {
+      unlockSpeechEngine();
       document.getElementById('marker-modal').classList.add('hidden');
       autoSpawnMindTree('Mind Tree anchored in space');
     });
 
     document.getElementById('btn-rescan').addEventListener('click', resetAndRescanSurface);
-    document.getElementById('btn-speak-flower').addEventListener('click', listenForWordsAndBloom);
+    document.getElementById('btn-speak-flower').addEventListener('click', () => {
+      unlockSpeechEngine();
+      listenForWordsAndBloom();
+    });
     document.getElementById('btn-play-voice').addEventListener('click', () => playRecordedVoice());
     document.getElementById('btn-bubble-play').addEventListener('click', () => playRecordedVoice());
     document.getElementById('btn-close-bubble').addEventListener('click', closeFlowerWordBubble);
     document.getElementById('btn-close-bet36-ad').addEventListener('click', closeBet36AdPopup);
-    document.getElementById('btn-replay-bet36-voice').addEventListener('click', playBet36VoiceRecording);
+    document.getElementById('btn-replay-bet36-voice').addEventListener('click', () => {
+      unlockSpeechEngine();
+      playBet36VoiceRecording();
+    });
+    document.getElementById('input-bet36-wav').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (bet36UploadedAudioUrl) URL.revokeObjectURL(bet36UploadedAudioUrl);
+      bet36UploadedAudioUrl = URL.createObjectURL(file);
+      playBet36VoiceRecording();
+    });
     document.getElementById('btn-toggle-audio').addEventListener('click', () => {
       const active = soundscape.toggle();
       document.getElementById('icon-audio-off').classList.toggle('hidden', active);
