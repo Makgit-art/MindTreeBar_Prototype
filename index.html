@@ -182,6 +182,34 @@
       transform: translateY(0);
     }
 
+    /* Floating Word Bubble Popup Above Tapped Flower */
+    .word-bubble {
+      position: fixed;
+      z-index: 25;
+      transform: translate(-50%, calc(-100% - 14px));
+      background: rgba(36, 51, 42, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      border-radius: 20px;
+      padding: 8px 12px;
+      color: #f5f3ee;
+      box-shadow: 0 10px 26px rgba(18, 28, 22, 0.42);
+      pointer-events: auto;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .word-bubble::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: -7px;
+      transform: translateX(-50%);
+      border-width: 7px 7px 0 7px;
+      border-style: solid;
+      border-color: rgba(36, 51, 42, 0.72) transparent transparent transparent;
+    }
+
     /* Custom Range Sliders */
     input[type="range"] {
       -webkit-appearance: none;
@@ -325,8 +353,44 @@
       </div>
     </div>
 
+    <!-- Floating Word Bubble Popup (Appears Above Tapped Flower) -->
+    <div id="flower-word-bubble" class="hidden word-bubble flex items-center gap-2.5 w-64 max-w-[82vw]">
+      <button id="btn-bubble-play" class="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 border border-white/50 flex items-center justify-center shrink-0 text-[#f5f3ee] transition active:scale-95" title="Play / Pause Flower Voice">
+        <svg id="icon-bubble-play" class="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+        <svg id="icon-bubble-pause" class="hidden w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
+        </svg>
+      </button>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <span id="bubble-flower-title" class="text-[10px] font-semibold uppercase tracking-wider text-[#f5b7c8]">Flower #1</span>
+          <button id="btn-close-bubble" class="text-[11px] text-[#f5f3ee]/70 hover:text-white px-1 leading-none" title="Close">✕</button>
+        </div>
+        <canvas id="bubble-wave-canvas" class="w-full h-6 block mt-0.5"></canvas>
+        <div id="bubble-transcript" class="text-[10px] text-[#f5f3ee]/90 truncate mt-0.5">"Spoken reflection"</div>
+      </div>
+    </div>
+
     <!-- Bottom Controls & Gentle Toast -->
     <div class="flex flex-col items-center gap-2.5">
+      <!-- Voice Recording Waveform & Playback Card -->
+      <div id="voice-wave-card" class="hidden interactive-ui nature-card px-3.5 py-2 rounded-2xl flex items-center gap-2.5 w-full max-w-sm">
+        <button id="btn-play-voice" class="w-8 h-8 rounded-full bg-transparent hover:bg-white/15 border border-white/50 flex items-center justify-center shrink-0 text-[#f5f3ee] transition active:scale-95" title="Play / Pause Recorded Voice">
+          <svg id="icon-voice-play" class="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <svg id="icon-voice-pause" class="hidden w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
+          </svg>
+        </button>
+        <div class="flex-1 min-w-0">
+          <canvas id="voice-wave-canvas" class="w-full h-8 block"></canvas>
+          <div id="voice-transcript-label" class="text-[10px] text-[#f5f3ee]/85 truncate mt-0.5">Recording voice…</div>
+        </div>
+      </div>
+
       <div id="toast-banner" class="hidden nature-card px-4 py-2 rounded-full text-xs font-medium text-[#f5f3ee]">
         Mind Tree rooted vertically on reticle.
       </div>
@@ -638,9 +702,15 @@
       // Voice-to-Flower state
       isListeningSpeech: false,
       flowerCount: 0,
+      recordedAudioUrl: null,
+      recordedAudioEl: null,
+      waveformPeaks: [],
+      selectedFlower: null,
 
       // Touch / Pointer interaction for rotating & scaling
       isDragging: false,
+      pointerDownX: 0,
+      pointerDownY: 0,
       lastPointerX: 0,
       initialPinchDist: null,
       initialPinchScale: 1.0
@@ -870,32 +940,191 @@
       stamen.position.y = 0.008;
       flowerGroup.add(stamen);
 
-      // Position flower around the upper canopy surface of the Mind Tree
-      const goldenAngle = state.flowerCount * 2.39996;
-      const canopyCenterY = 0.42 + ((state.flowerCount % 5) - 2) * 0.038;
-      const radius = 0.135 + (state.flowerCount % 3) * 0.018;
+      // Compute exact canopy center & surface normal so flowers sit cleanly on the outside
+      // of the foliage with their front (+Y) facing directly outward away from the canopy
+      modelPivot.updateMatrixWorld(true);
+      const canopyBox = new THREE.Box3();
+      if (animatedParts.canopy) {
+        canopyBox.setFromObject(animatedParts.canopy);
+      } else {
+        canopyBox.setFromObject(modelPivot);
+      }
 
+      const worldCenter = canopyBox.getCenter(new THREE.Vector3());
+      const worldSize = canopyBox.getSize(new THREE.Vector3());
+      const localCenter = modelPivot.worldToLocal(worldCenter.clone());
+
+      // Convert world canopy dimensions into modelPivot local space
+      const pivotScale = modelPivot.scale.x || 1;
+      const rx = ((worldSize.x / pivotScale) * 0.5) + 0.014;
+      const ry = ((worldSize.y / pivotScale) * 0.5) + 0.014;
+      const rz = ((worldSize.z / pivotScale) * 0.5) + 0.014;
+
+      // Distribute flowers across the upper-to-mid canopy dome using a Fibonacci hemisphere
+      const idx = state.flowerCount;
+      const goldenAngle = idx * 2.39996;
+      const vFrac = ((idx * 0.6180339) % 1);
+      const cosPhi = 0.88 - vFrac * 0.72; // Range from upper crown (+0.88) to mid-canopy (+0.16)
+      const sinPhi = Math.sqrt(Math.max(0.05, 1 - cosPhi * cosPhi));
+
+      const unitDir = new THREE.Vector3(
+        Math.cos(goldenAngle) * sinPhi,
+        cosPhi,
+        Math.sin(goldenAngle) * sinPhi
+      ).normalize();
+
+      // Place flower slightly outside the canopy ellipsoid so petals never clip inside foliage
       flowerGroup.position.set(
-        Math.cos(goldenAngle) * radius,
-        canopyCenterY,
-        Math.sin(goldenAngle) * radius
+        localCenter.x + unitDir.x * rx,
+        localCenter.y + unitDir.y * ry,
+        localCenter.z + unitDir.z * rz
       );
 
-      // Orient flower outward from the canopy center
-      flowerGroup.lookAt(
-        flowerGroup.position.x * 2,
-        flowerGroup.position.y + 0.08,
-        flowerGroup.position.z * 2
-      );
-      flowerGroup.rotateX(Math.PI / 2);
+      // Align the flower's local +Y (front face) directly along the outward surface normal
+      const outwardNormal = new THREE.Vector3(
+        unitDir.x / rx,
+        unitDir.y / ry,
+        unitDir.z / rz
+      ).normalize();
+      flowerGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outwardNormal);
+      flowerGroup.rotateY(goldenAngle);
+      flowerGroup.userData.baseQuat = flowerGroup.quaternion.clone();
 
       flowerGroup.userData.bloom = 0.02;
+      flowerGroup.userData.flowerIndex = state.flowerCount + 1;
+      flowerGroup.userData.transcript = spokenWords || 'Spoken reflection';
+      flowerGroup.userData.audioUrl = null;
+      flowerGroup.userData.peaks = [0.22, 0.48, 0.35, 0.62, 0.28];
+
+      // Invisible enlarged hit-sphere so tapping a flower on mobile is effortless
+      const hitMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 8, 8),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      flowerGroup.add(hitMesh);
+
       flowersGroup.add(flowerGroup);
       state.flowerCount++;
 
       soundscape.playBloomChime();
       const previewText = spokenWords ? ` ("${spokenWords}")` : '';
-      showToast(`Flower #${state.flowerCount} bloomed on the tree${previewText}`);
+      showToast(`Flower #${state.flowerCount} bloomed — tap any flower to hear its voice${previewText}`);
+      return flowerGroup;
+    }
+
+    /**
+     * ============================================================================
+     * 4B. FLOWER TAP RAYCASTING & FLOATING WORD BUBBLE VOICE PLAYER
+     * ============================================================================
+     */
+    const flowerRaycaster = new THREE.Raycaster();
+    const flowerWordBubble = document.getElementById('flower-word-bubble');
+    const bubbleWaveCanvas = document.getElementById('bubble-wave-canvas');
+    const bubbleWaveCtx = bubbleWaveCanvas ? bubbleWaveCanvas.getContext('2d') : null;
+    const bubbleTempVec = new THREE.Vector3();
+
+    function drawBubbleWaveform(peaks, progress = -1) {
+      if (!bubbleWaveCanvas || !bubbleWaveCtx) return;
+      const rect = bubbleWaveCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(100, Math.floor(rect.width * dpr));
+      const height = Math.max(20, Math.floor(rect.height * dpr));
+
+      if (bubbleWaveCanvas.width !== width || bubbleWaveCanvas.height !== height) {
+        bubbleWaveCanvas.width = width;
+        bubbleWaveCanvas.height = height;
+      }
+
+      bubbleWaveCtx.clearRect(0, 0, width, height);
+      const samples = peaks && peaks.length > 0 ? peaks : [0.2, 0.45, 0.3, 0.55, 0.25];
+      const barCount = Math.min(34, Math.max(14, samples.length));
+      const step = samples.length / barCount;
+      const gap = 2.5 * dpr;
+      const barWidth = Math.max(2 * dpr, (width - gap * (barCount - 1)) / barCount);
+      const midY = height * 0.5;
+
+      for (let i = 0; i < barCount; i++) {
+        const sampleIdx = Math.min(samples.length - 1, Math.floor(i * step));
+        const amp = Math.max(0.14, Math.min(1, samples[sampleIdx]));
+        const barH = amp * (height * 0.84);
+        const x = i * (barWidth + gap);
+        const y = midY - barH * 0.5;
+        const barRatio = i / barCount;
+
+        bubbleWaveCtx.fillStyle =
+          progress >= 0 && barRatio <= progress ? '#f5b7c8' : 'rgba(245, 243, 238, 0.45)';
+
+        bubbleWaveCtx.beginPath();
+        if (bubbleWaveCtx.roundRect) {
+          bubbleWaveCtx.roundRect(x, y, barWidth, barH, barWidth * 0.5);
+        } else {
+          bubbleWaveCtx.rect(x, y, barWidth, barH);
+        }
+        bubbleWaveCtx.fill();
+      }
+    }
+
+    function openFlowerWordBubble(flowerGroup) {
+      if (!flowerGroup) return;
+      state.selectedFlower = flowerGroup;
+
+      const idx = flowerGroup.userData.flowerIndex || 1;
+      const transcript = flowerGroup.userData.transcript || 'Spoken reflection';
+      document.getElementById('bubble-flower-title').textContent = `Flower #${idx}`;
+      document.getElementById('bubble-transcript').textContent = `"${transcript}"`;
+
+      flowerWordBubble.classList.remove('hidden');
+      updateFlowerWordBubblePosition();
+      drawBubbleWaveform(flowerGroup.userData.peaks || state.waveformPeaks, -1);
+    }
+
+    function closeFlowerWordBubble() {
+      state.selectedFlower = null;
+      flowerWordBubble.classList.add('hidden');
+    }
+
+    function updateFlowerWordBubblePosition() {
+      if (!state.selectedFlower || flowerWordBubble.classList.contains('hidden')) return;
+      state.selectedFlower.updateWorldMatrix(true, false);
+      bubbleTempVec.setFromMatrixPosition(state.selectedFlower.matrixWorld);
+      bubbleTempVec.project(camera);
+
+      // Hide if behind camera
+      if (bubbleTempVec.z > 1) {
+        flowerWordBubble.style.opacity = '0';
+        return;
+      }
+
+      const x = (bubbleTempVec.x * 0.5 + 0.5) * window.innerWidth;
+      const y = (-bubbleTempVec.y * 0.5 + 0.5) * window.innerHeight;
+      const clampedX = THREE.MathUtils.clamp(x, 140, window.innerWidth - 140);
+      const clampedY = THREE.MathUtils.clamp(y, 110, window.innerHeight - 90);
+
+      flowerWordBubble.style.opacity = '1';
+      flowerWordBubble.style.left = `${clampedX}px`;
+      flowerWordBubble.style.top = `${clampedY}px`;
+    }
+
+    function handleFlowerTapAt(clientX, clientY) {
+      if (flowersGroup.children.length === 0) return false;
+      const rect = arCanvas.getBoundingClientRect();
+      const pointerNDC = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1
+      );
+      flowerRaycaster.setFromCamera(pointerNDC, camera);
+      const hits = flowerRaycaster.intersectObjects(flowersGroup.children, true);
+      if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj && obj.parent !== flowersGroup) {
+          obj = obj.parent;
+        }
+        if (obj) {
+          openFlowerWordBubble(obj);
+          return true;
+        }
+      }
+      return false;
     }
 
     /**
@@ -1393,6 +1622,18 @@
         flowersGroup.remove(flowersGroup.children[0]);
       }
       state.flowerCount = 0;
+      closeFlowerWordBubble();
+
+      if (state.recordedAudioEl) {
+        state.recordedAudioEl.pause();
+        state.recordedAudioEl = null;
+      }
+      if (state.recordedAudioUrl) {
+        URL.revokeObjectURL(state.recordedAudioUrl);
+        state.recordedAudioUrl = null;
+      }
+      state.waveformPeaks = [];
+      document.getElementById('voice-wave-card').classList.add('hidden');
 
       if (state.isCameraActive) {
         worldAnchorGroup.visible = false;
@@ -1410,140 +1651,287 @@
 
     /**
      * ============================================================================
-     * 5B. MOBILE MICROPHONE SPEECH RECOGNITION (UP TO 10 WORDS -> BLOOMS FLOWER)
+     * 5B. VOICE WAVEFORM RECORDER, PLAYBACK & SPEECH-TO-FLOWER BLOOM (<=10 WORDS)
      * ============================================================================
      */
+    const voiceWaveCanvas = document.getElementById('voice-wave-canvas');
+    const voiceWaveCtx = voiceWaveCanvas ? voiceWaveCanvas.getContext('2d') : null;
+    let voicePlaybackAnimId = null;
+
+    function drawVoiceWaveform(peaks, progress = -1, isLive = false) {
+      if (!voiceWaveCanvas || !voiceWaveCtx) return;
+      const rect = voiceWaveCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(120, Math.floor(rect.width * dpr));
+      const height = Math.max(24, Math.floor(rect.height * dpr));
+
+      if (voiceWaveCanvas.width !== width || voiceWaveCanvas.height !== height) {
+        voiceWaveCanvas.width = width;
+        voiceWaveCanvas.height = height;
+      }
+
+      voiceWaveCtx.clearRect(0, 0, width, height);
+      const samples = peaks.length > 0 ? peaks : [0.12, 0.2, 0.14, 0.24, 0.16];
+      const barCount = Math.min(48, Math.max(16, samples.length));
+      const step = samples.length / barCount;
+      const gap = 3 * dpr;
+      const barWidth = Math.max(2 * dpr, (width - gap * (barCount - 1)) / barCount);
+      const midY = height * 0.5;
+
+      for (let i = 0; i < barCount; i++) {
+        const sampleIdx = Math.min(samples.length - 1, Math.floor(i * step));
+        const amp = Math.max(0.12, Math.min(1, samples[sampleIdx]));
+        const barH = amp * (height * 0.84);
+        const x = i * (barWidth + gap);
+        const y = midY - barH * 0.5;
+        const barRatio = i / barCount;
+
+        if (isLive) {
+          voiceWaveCtx.fillStyle = 'rgba(245, 183, 200, 0.92)';
+        } else if (progress >= 0 && barRatio <= progress) {
+          voiceWaveCtx.fillStyle = '#a8c0ae';
+        } else {
+          voiceWaveCtx.fillStyle = 'rgba(245, 243, 238, 0.45)';
+        }
+
+        voiceWaveCtx.beginPath();
+        if (voiceWaveCtx.roundRect) {
+          voiceWaveCtx.roundRect(x, y, barWidth, barH, barWidth * 0.5);
+        } else {
+          voiceWaveCtx.rect(x, y, barWidth, barH);
+        }
+        voiceWaveCtx.fill();
+      }
+    }
+
+    function updatePlayPauseIcons(isPlaying) {
+      document.getElementById('icon-voice-play').classList.toggle('hidden', isPlaying);
+      document.getElementById('icon-voice-pause').classList.toggle('hidden', !isPlaying);
+      const bubblePlay = document.getElementById('icon-bubble-play');
+      const bubblePause = document.getElementById('icon-bubble-pause');
+      if (bubblePlay) bubblePlay.classList.toggle('hidden', isPlaying);
+      if (bubblePause) bubblePause.classList.toggle('hidden', !isPlaying);
+    }
+
+    function playRecordedVoice(customUrl = null, customPeaks = null) {
+      const targetUrl = customUrl || (state.selectedFlower && state.selectedFlower.userData.audioUrl) || state.recordedAudioUrl;
+      const targetPeaks = customPeaks || (state.selectedFlower && state.selectedFlower.userData.peaks) || state.waveformPeaks;
+
+      if (!targetUrl) {
+        showToast('Record your voice first to play it back.');
+        return;
+      }
+
+      if (state.recordedAudioEl && !state.recordedAudioEl.paused && state.recordedAudioEl.src === targetUrl) {
+        state.recordedAudioEl.pause();
+        updatePlayPauseIcons(false);
+        cancelAnimationFrame(voicePlaybackAnimId);
+        return;
+      }
+
+      if (state.recordedAudioEl) {
+        state.recordedAudioEl.pause();
+      }
+
+      state.recordedAudioEl = new Audio(targetUrl);
+      state.recordedAudioEl.onended = () => {
+        updatePlayPauseIcons(false);
+        cancelAnimationFrame(voicePlaybackAnimId);
+        drawVoiceWaveform(state.waveformPeaks, -1, false);
+        drawBubbleWaveform(targetPeaks, -1);
+      };
+
+      state.recordedAudioEl.currentTime = 0;
+      state.recordedAudioEl.play().then(() => {
+        updatePlayPauseIcons(true);
+        const tickPlayback = () => {
+          if (!state.recordedAudioEl || state.recordedAudioEl.paused) return;
+          const dur = state.recordedAudioEl.duration || 1;
+          const progress = Math.min(1, state.recordedAudioEl.currentTime / dur);
+          drawVoiceWaveform(state.waveformPeaks, progress, false);
+          drawBubbleWaveform(targetPeaks, progress);
+          voicePlaybackAnimId = requestAnimationFrame(tickPlayback);
+        };
+        tickPlayback();
+      }).catch(() => {
+        showToast('Tap play to hear your recorded voice.');
+      });
+    }
+
     async function listenForWordsAndBloom() {
       if (state.isListeningSpeech) return;
       const micLabel = document.getElementById('label-mic');
       const micBtn = document.getElementById('btn-speak-flower');
+      const waveCard = document.getElementById('voice-wave-card');
+      const transcriptLabel = document.getElementById('voice-transcript-label');
 
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        spawnFlowerOnTree('Mindful breath');
+        return;
+      }
+
+      let audioStream = null;
+      let audioCtx = null;
+      let mediaRecorder = null;
+      let recordedChunks = [];
+      let recognition = null;
+      let capturedWords = '';
+      let isFinished = false;
+      const livePeaks = [];
+
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } catch (err) {
+        showToast('Microphone permission denied.');
+        return;
+      }
+
+      state.isListeningSpeech = true;
+      micLabel.textContent = 'Recording…';
+      micBtn.classList.add('border-[#f5b7c8]');
+      waveCard.classList.remove('hidden');
+      transcriptLabel.textContent = 'Speak up to 10 words…';
+      updatePlayPauseIcons(false);
+
+      // Set up Web Audio analyser for live waveform bars
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioCtx();
+      const source = audioCtx.createMediaStreamSource(audioStream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const timeData = new Uint8Array(analyser.frequencyBinCount);
+
+      // Set up MediaRecorder to capture playable audio blob
+      if (typeof MediaRecorder !== 'undefined') {
+        try {
+          mediaRecorder = new MediaRecorder(audioStream);
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+          };
+          mediaRecorder.start(100);
+        } catch (e) {
+          mediaRecorder = null;
+        }
+      }
+
+      let speechDetected = false;
+      let silenceFrames = 0;
+      const startTime = performance.now();
+
+      const finalizeRecording = () => {
+        if (isFinished) return;
+        isFinished = true;
+        state.isListeningSpeech = false;
+        micLabel.textContent = 'Speak (≤10 words)';
+        micBtn.classList.remove('border-[#f5b7c8]');
+
+        if (recognition) {
+          try { recognition.stop(); } catch (e) {}
+        }
+
+        const finishAudioCleanup = () => {
+          audioStream.getTracks().forEach((t) => t.stop());
+          if (audioCtx) audioCtx.close().catch(() => {});
+
+          state.waveformPeaks = livePeaks.length > 0 ? livePeaks.slice() : [0.2, 0.45, 0.3, 0.55, 0.25];
+          drawVoiceWaveform(state.waveformPeaks, -1, false);
+
+          const finalWords = capturedWords || (speechDetected ? 'Spoken reflection' : '');
+          transcriptLabel.textContent = finalWords ? `"${finalWords}"` : 'Tap play to listen';
+
+          let blobUrl = null;
+          if (recordedChunks.length > 0) {
+            if (state.recordedAudioEl) {
+              state.recordedAudioEl.pause();
+              state.recordedAudioEl = null;
+            }
+            const audioBlob = new Blob(recordedChunks, { type: recordedChunks[0].type || 'audio/webm' });
+            blobUrl = URL.createObjectURL(audioBlob);
+            state.recordedAudioUrl = blobUrl;
+          }
+
+          if (finalWords || speechDetected) {
+            const newFlower = spawnFlowerOnTree(finalWords);
+            if (newFlower) {
+              newFlower.userData.audioUrl = blobUrl;
+              newFlower.userData.peaks = state.waveformPeaks.slice();
+              openFlowerWordBubble(newFlower);
+            }
+            if (blobUrl) {
+              playRecordedVoice(blobUrl, state.waveformPeaks);
+            }
+          } else {
+            showToast('No voice detected — tap Speak to try again.');
+          }
+        };
+
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.onstop = finishAudioCleanup;
+          mediaRecorder.stop();
+        } else {
+          finishAudioCleanup();
+        }
+      };
+
+      // Optional parallel speech-to-text for 10-word cap & caption
       const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      // Primary path: Native Mobile Web Speech Recognition API
       if (SpeechRec) {
         try {
-          const recognition = new SpeechRec();
+          recognition = new SpeechRec();
           recognition.lang = 'en-US';
           recognition.interimResults = true;
           recognition.maxAlternatives = 1;
-          recognition.continuous = false;
-
-          state.isListeningSpeech = true;
-          micLabel.textContent = 'Listening…';
-          micBtn.classList.add('border-[#f5b7c8]');
-          showToast('Speak up to 10 words into your microphone…');
-
-          let capturedWords = '';
-          let hasSpawned = false;
-
           recognition.onresult = (event) => {
             let transcript = '';
             for (let i = 0; i < event.results.length; i++) {
               transcript += event.results[i][0].transcript + ' ';
             }
             const words = transcript.trim().split(/\s+/).filter(Boolean);
-            const limitedWords = words.slice(0, 10);
-            capturedWords = limitedWords.join(' ');
-            micLabel.textContent = `${limitedWords.length}/10 words…`;
-
-            // Stop early once 10 words are spoken
+            const limited = words.slice(0, 10);
+            capturedWords = limited.join(' ');
+            micLabel.textContent = `${limited.length}/10 words…`;
+            transcriptLabel.textContent = `"${capturedWords}"`;
             if (words.length >= 10) {
-              recognition.stop();
+              finalizeRecording();
             }
           };
-
-          recognition.onend = () => {
-            state.isListeningSpeech = false;
-            micLabel.textContent = 'Speak (≤10 words)';
-            micBtn.classList.remove('border-[#f5b7c8]');
-            if (!hasSpawned && capturedWords.length > 0) {
-              hasSpawned = true;
-              spawnFlowerOnTree(capturedWords);
-            } else if (!hasSpawned) {
-              showToast('No words heard — tap Speak and try again.');
-            }
-          };
-
-          recognition.onerror = () => {
-            state.isListeningSpeech = false;
-            micLabel.textContent = 'Speak (≤10 words)';
-            micBtn.classList.remove('border-[#f5b7c8]');
-            listenWithAudioEnvelopeFallback();
-          };
-
           recognition.start();
-          return;
-        } catch (err) {
-          state.isListeningSpeech = false;
+        } catch (e) {
+          recognition = null;
         }
       }
 
-      // Fallback path for mobile browsers without SpeechRecognition: live microphone voice detector
-      listenWithAudioEnvelopeFallback();
-    }
+      // Live waveform sampling loop
+      const sampleLiveWaveform = () => {
+        if (isFinished) return;
+        analyser.getByteTimeDomainData(timeData);
+        let peak = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const amp = Math.abs(timeData[i] - 128) / 128;
+          if (amp > peak) peak = amp;
+        }
 
-    async function listenWithAudioEnvelopeFallback() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        spawnFlowerOnTree('Mindful breath');
-        return;
-      }
+        const normalizedAmp = Math.min(1, peak * 2.8);
+        livePeaks.push(normalizedAmp);
+        if (livePeaks.length > 64) livePeaks.shift();
+        drawVoiceWaveform(livePeaks, -1, true);
 
-      const micLabel = document.getElementById('label-mic');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioCtx();
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
+        if (peak > 0.08) {
+          speechDetected = true;
+          silenceFrames = 0;
+        } else if (speechDetected) {
+          silenceFrames++;
+        }
 
-        state.isListeningSpeech = true;
-        micLabel.textContent = 'Listening…';
-        showToast('Speak up to 10 words into your microphone…');
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        let speechDetected = false;
-        let silenceFrames = 0;
-        const startTime = performance.now();
-
-        const checkVoice = () => {
-          analyser.getByteTimeDomainData(dataArray);
-          let peak = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            const amp = Math.abs(dataArray[i] - 128);
-            if (amp > peak) peak = amp;
-          }
-
-          if (peak > 12) {
-            speechDetected = true;
-            silenceFrames = 0;
-          } else if (speechDetected) {
-            silenceFrames++;
-          }
-
-          const elapsed = performance.now() - startTime;
-          if ((speechDetected && silenceFrames > 28) || elapsed > 5500) {
-            stream.getTracks().forEach((t) => t.stop());
-            audioCtx.close();
-            state.isListeningSpeech = false;
-            micLabel.textContent = 'Speak (≤10 words)';
-            if (speechDetected) {
-              spawnFlowerOnTree('Spoken reflection');
-            } else {
-              showToast('No voice detected — tap Speak to bloom a flower.');
-            }
-            return;
-          }
-          requestAnimationFrame(checkVoice);
-        };
-        checkVoice();
-      } catch (err) {
-        state.isListeningSpeech = false;
-        micLabel.textContent = 'Speak (≤10 words)';
-        showToast('Microphone permission denied.');
-      }
+        const elapsed = performance.now() - startTime;
+        if ((speechDetected && silenceFrames > 32) || elapsed > 6000) {
+          finalizeRecording();
+          return;
+        }
+        requestAnimationFrame(sampleLiveWaveform);
+      };
+      sampleLiveWaveform();
     }
 
     let toastTimer = null;
@@ -1674,6 +2062,8 @@
      */
     arCanvas.addEventListener('pointerdown', (e) => {
       state.isDragging = true;
+      state.pointerDownX = e.clientX;
+      state.pointerDownY = e.clientY;
       state.lastPointerX = e.clientX;
     });
 
@@ -1684,7 +2074,13 @@
       state.userRotationY += dx * 0.012;
     });
 
-    window.addEventListener('pointerup', () => {
+    window.addEventListener('pointerup', (e) => {
+      if (state.isDragging) {
+        const moveDist = Math.hypot(e.clientX - state.pointerDownX, e.clientY - state.pointerDownY);
+        if (moveDist < 10) {
+          handleFlowerTapAt(e.clientX, e.clientY);
+        }
+      }
       state.isDragging = false;
     });
 
@@ -1841,6 +2237,9 @@
 
     document.getElementById('btn-rescan').addEventListener('click', resetAndRescanSurface);
     document.getElementById('btn-speak-flower').addEventListener('click', listenForWordsAndBloom);
+    document.getElementById('btn-play-voice').addEventListener('click', () => playRecordedVoice());
+    document.getElementById('btn-bubble-play').addEventListener('click', () => playRecordedVoice());
+    document.getElementById('btn-close-bubble').addEventListener('click', closeFlowerWordBubble);
 
     document.getElementById('btn-toggle-audio').addEventListener('click', () => {
       const active = soundscape.toggle();
@@ -1940,13 +2339,19 @@
           }
           const s = 1 - Math.pow(1 - flower.userData.bloom, 3);
           flower.scale.setScalar(Math.max(0.01, s));
-          flower.rotation.z = Math.sin(elapsed * 1.4 + idx) * 0.08;
+          if (flower.userData.baseQuat) {
+            flower.quaternion.copy(flower.userData.baseQuat);
+            flower.rotateY(Math.sin(elapsed * 1.4 + idx) * 0.08);
+          }
         });
         groundRingMat.opacity = 0.55 + Math.sin(elapsed * 2.0) * 0.2;
         const rippleScale = 1 + (Math.sin(elapsed * 1.6) * 0.5 + 0.5) * 0.14;
         outerRippleMesh.scale.set(rippleScale, 1, rippleScale);
         outerRippleMat.opacity = 0.35 * (1.15 - rippleScale);
       }
+
+      // 4B. Keep the floating word bubble anchored smoothly above the tapped flower
+      updateFlowerWordBubblePosition();
 
       // 5. Update live X/Y/Z spatial telemetry HUD
       document.getElementById('telemetry-x').textContent = `${state.anchorPos.x >= 0 ? '+' : ''}${state.anchorPos.x.toFixed(2)}m`;
