@@ -919,7 +919,11 @@
 
       root.add(node2CanopyGroup);
 
-      // Normalize bounds so the tree stands upright vertically with its root base at y = 0
+      // Stand the tree upright vertically so its trunk extends straight up along +Y
+      root.rotation.x = -Math.PI / 2;
+      root.updateMatrixWorld(true);
+
+      // Normalize bounds so the vertical tree rests cleanly at y = 0 on the reticle
       const bbox = new THREE.Box3().setFromObject(root);
       const center = bbox.getCenter(new THREE.Vector3());
       const size = bbox.getSize(new THREE.Vector3());
