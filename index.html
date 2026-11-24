@@ -787,8 +787,14 @@
           this.tempTarget.sub(sensorOffset);
         }
 
-        const smoothFactor = isReticleVisible ? 0.32 : 0.12;
-        this.lockedWorldPos.lerp(this.tempTarget, smoothFactor);
+        // Deadzone & critically damped smoothing prevents micro-jitter and jumping
+        const distDelta = this.lockedWorldPos.distanceTo(this.tempTarget);
+        if (distDelta > 0.008) {
+          const smoothFactor = isReticleVisible
+            ? THREE.MathUtils.clamp(distDelta * 0.45, 0.06, 0.18)
+            : 0.08;
+          this.lockedWorldPos.lerp(this.tempTarget, smoothFactor);
+        }
         return this.lockedWorldPos;
       }
 
@@ -913,7 +919,7 @@
 
       root.add(node2CanopyGroup);
 
-      // Normalize bounds and lay the tree horizontally across the reticle plane
+      // Normalize bounds so the tree stands upright vertically with its root base at y = 0
       const bbox = new THREE.Box3().setFromObject(root);
       const center = bbox.getCenter(new THREE.Vector3());
       const size = bbox.getSize(new THREE.Vector3());
@@ -922,14 +928,10 @@
 
       root.position.set(-center.x, -bbox.min.y, -center.z);
 
-      const horizontalHolder = new THREE.Group();
-      horizontalHolder.add(root);
-      horizontalHolder.rotation.x = Math.PI / 2;
-
       const wrapper = new THREE.Group();
-      wrapper.add(horizontalHolder);
+      wrapper.add(root);
       wrapper.scale.setScalar(normScale);
-      wrapper.position.y = 0.05;
+      wrapper.position.y = 0;
 
       animatedParts.canopy = node2CanopyGroup;
       animatedParts.spire = null;
@@ -1024,50 +1026,99 @@
       return Math.min(1, rawScore * (0.72 + 0.28 * symmetryBonus));
     }
 
+    // Persistent tracker state for temporal smoothing and local-window lock
+    const trackerMemory = {
+      hasLock: false,
+      lastCx: 80,
+      lastCy: 80,
+      lastHalfBox: 44,
+      smoothedNdcX: 0,
+      smoothedNdcY: 0,
+      smoothedScale: 1.0
+    };
+
     function scanFullViewportReticle(imgData, w, h) {
       const data = imgData.data;
-      const scales = [22, 32, 44, 58, 70];
-
       let bestScore = 0;
-      let bestCx = w * 0.5;
-      let bestCy = h * 0.5;
-      let bestHalfBox = 44;
+      let bestCx = trackerMemory.lastCx;
+      let bestCy = trackerMemory.lastCy;
+      let bestHalfBox = trackerMemory.lastHalfBox;
 
-      for (let s = 0; s < scales.length; s++) {
-        const hb = scales[s];
-        const minX = hb;
-        const maxX = w - hb;
-        const minY = hb;
-        const maxY = h - hb;
-        if (minX >= maxX || minY >= maxY) continue;
+      if (trackerMemory.hasLock) {
+        // When already locked, search only a tight local neighborhood around the previous position & scale
+        // This eliminates jumping to false background patterns across the screen
+        const localScales = [
+          Math.max(22, trackerMemory.lastHalfBox - 6),
+          trackerMemory.lastHalfBox,
+          Math.min(70, trackerMemory.lastHalfBox + 6)
+        ];
 
-        const step = Math.max(10, Math.floor(hb * 0.45));
-        for (let cy = minY; cy <= maxY; cy += step) {
-          for (let cx = minX; cx <= maxX; cx += step) {
-            const score = evaluatePatchScore(data, w, h, cx, cy, hb);
-            if (score > bestScore) {
-              bestScore = score;
-              bestCx = cx;
-              bestCy = cy;
-              bestHalfBox = hb;
+        for (let s = 0; s < localScales.length; s++) {
+          const hb = localScales[s];
+          for (let dy = -16; dy <= 16; dy += 4) {
+            for (let dx = -16; dx <= 16; dx += 4) {
+              const cx = THREE.MathUtils.clamp(trackerMemory.lastCx + dx, hb, w - hb);
+              const cy = THREE.MathUtils.clamp(trackerMemory.lastCy + dy, hb, h - hb);
+              const score = evaluatePatchScore(data, w, h, cx, cy, hb);
+              if (score > bestScore) {
+                bestScore = score;
+                bestCx = cx;
+                bestCy = cy;
+                bestHalfBox = hb;
+              }
             }
           }
         }
       }
 
-      // Fine sub-grid refinement around best match
-      const fineStep = 3;
-      for (let dy = -9; dy <= 9; dy += fineStep) {
-        for (let dx = -9; dx <= 9; dx += fineStep) {
-          const cx = THREE.MathUtils.clamp(bestCx + dx, bestHalfBox, w - bestHalfBox);
-          const cy = THREE.MathUtils.clamp(bestCy + dy, bestHalfBox, h - bestHalfBox);
-          const score = evaluatePatchScore(data, w, h, cx, cy, bestHalfBox);
-          if (score > bestScore) {
-            bestScore = score;
-            bestCx = cx;
-            bestCy = cy;
+      // If not locked yet or local search lost confidence, perform a full-frame scan
+      if (!trackerMemory.hasLock || bestScore < state.lockThreshold * 0.85) {
+        const scales = [24, 34, 44, 56, 68];
+        for (let s = 0; s < scales.length; s++) {
+          const hb = scales[s];
+          const minX = hb;
+          const maxX = w - hb;
+          const minY = hb;
+          const maxY = h - hb;
+          if (minX >= maxX || minY >= maxY) continue;
+
+          const step = Math.max(10, Math.floor(hb * 0.45));
+          for (let cy = minY; cy <= maxY; cy += step) {
+            for (let cx = minX; cx <= maxX; cx += step) {
+              const score = evaluatePatchScore(data, w, h, cx, cy, hb);
+              if (score > bestScore) {
+                bestScore = score;
+                bestCx = cx;
+                bestCy = cy;
+                bestHalfBox = hb;
+              }
+            }
           }
         }
+
+        // Fine sub-grid refinement around best global match
+        for (let dy = -8; dy <= 8; dy += 2) {
+          for (let dx = -8; dx <= 8; dx += 2) {
+            const cx = THREE.MathUtils.clamp(bestCx + dx, bestHalfBox, w - bestHalfBox);
+            const cy = THREE.MathUtils.clamp(bestCy + dy, bestHalfBox, h - bestHalfBox);
+            const score = evaluatePatchScore(data, w, h, cx, cy, bestHalfBox);
+            if (score > bestScore) {
+              bestScore = score;
+              bestCx = cx;
+              bestCy = cy;
+            }
+          }
+        }
+      }
+
+      if (bestScore >= state.lockThreshold * 0.85) {
+        trackerMemory.hasLock = true;
+        // Exponential moving average on pixel coordinates and scale to eliminate frame-to-frame snapping
+        trackerMemory.lastCx = THREE.MathUtils.lerp(trackerMemory.lastCx, bestCx, 0.35);
+        trackerMemory.lastCy = THREE.MathUtils.lerp(trackerMemory.lastCy, bestCy, 0.35);
+        trackerMemory.lastHalfBox = THREE.MathUtils.lerp(trackerMemory.lastHalfBox, bestHalfBox, 0.25);
+      } else {
+        trackerMemory.hasLock = false;
       }
 
       // Account for video object-fit: cover cropping to map accurately to screen NDC
@@ -1078,8 +1129,8 @@
       const videoAspect = vw / vh;
       const screenAspect = sw / sh;
 
-      let u = bestCx / w;
-      let v = bestCy / h;
+      let u = trackerMemory.lastCx / w;
+      let v = trackerMemory.lastCy / h;
 
       if (videoAspect > screenAspect) {
         const visibleRatio = screenAspect / videoAspect;
@@ -1089,11 +1140,27 @@
         v = (v - 0.5) / visibleRatio + 0.5;
       }
 
-      const ndcX = THREE.MathUtils.clamp(u * 2 - 1, -0.95, 0.95);
-      const ndcY = THREE.MathUtils.clamp(-(v * 2 - 1), -0.95, 0.95);
-      const apparentScale = bestHalfBox / 44;
+      const rawNdcX = THREE.MathUtils.clamp(u * 2 - 1, -0.95, 0.95);
+      const rawNdcY = THREE.MathUtils.clamp(-(v * 2 - 1), -0.95, 0.95);
+      const rawScale = trackerMemory.lastHalfBox / 44;
 
-      return { score: bestScore, ndcX, ndcY, apparentScale };
+      // Apply deadzone filter on NDC & apparent scale so tiny noise doesn't move the tree
+      if (Math.abs(rawNdcX - trackerMemory.smoothedNdcX) > 0.012) {
+        trackerMemory.smoothedNdcX = THREE.MathUtils.lerp(trackerMemory.smoothedNdcX, rawNdcX, 0.25);
+      }
+      if (Math.abs(rawNdcY - trackerMemory.smoothedNdcY) > 0.012) {
+        trackerMemory.smoothedNdcY = THREE.MathUtils.lerp(trackerMemory.smoothedNdcY, rawNdcY, 0.25);
+      }
+      if (Math.abs(rawScale - trackerMemory.smoothedScale) > 0.03) {
+        trackerMemory.smoothedScale = THREE.MathUtils.lerp(trackerMemory.smoothedScale, rawScale, 0.18);
+      }
+
+      return {
+        score: bestScore,
+        ndcX: trackerMemory.smoothedNdcX,
+        ndcY: trackerMemory.smoothedNdcY,
+        apparentScale: trackerMemory.smoothedScale
+      };
     }
 
     function computeCustomImageMatch(imgData) {
@@ -1182,8 +1249,8 @@
       document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-[#3b5243]';
       document.getElementById('status-title').textContent = reason;
       document.getElementById('status-subtitle').textContent = state.isDemoMode
-        ? 'Tree resting horizontally on virtual Reticle V3 card'
-        : 'Resting horizontally on reticle image center';
+        ? 'Standing upright on virtual Reticle V3 card'
+        : 'Standing upright on reticle image center';
       document.getElementById('reticle-box').classList.add('locked');
       const ghostEl = document.getElementById('ghost-reticle-guide');
       if (ghostEl) ghostEl.style.opacity = '0.0';
@@ -1200,6 +1267,10 @@
       state.bloomProgress = 0;
       state.baseAlpha = null;
       state.sensorOffset.set(0, 0, 0);
+      trackerMemory.hasLock = false;
+      trackerMemory.lastCx = 80;
+      trackerMemory.lastCy = 80;
+      trackerMemory.lastHalfBox = 44;
       demoReticleCardGroup.visible = false;
       reticleLockTracker.reset();
 
